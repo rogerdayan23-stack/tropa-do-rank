@@ -17,9 +17,18 @@ import {
   Loader2,
   Clock,
   UserCog,
+  Settings2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface AdminUser {
   id: string;
@@ -87,6 +96,11 @@ export default function UsuariosAdminPage() {
   const [meId, setMeId] = useState<string | null>(null);
   const [busca, setBusca] = useState("");
   const [processando, setProcessando] = useState<string | null>(null);
+  const [usuarioEmEdicao, setUsuarioEmEdicao] = useState<AdminUser | null>(null);
+  const [operacaoHoras, setOperacaoHoras] = useState<"add" | "subtract">("add");
+  const [horasAjuste, setHorasAjuste] = useState("1");
+  const [minutosAjuste, setMinutosAjuste] = useState("0");
+  const [salvandoAjuste, setSalvandoAjuste] = useState(false);
 
   useEffect(() => {
     async function verificarECarregar() {
@@ -159,6 +173,66 @@ export default function UsuariosAdminPage() {
     } catch {
       toast.error("Erro de conexão");
     } finally {
+      setProcessando(null);
+    }
+  }
+
+  function abrirAjusteHoras(user: AdminUser) {
+    setOperacaoHoras("add");
+    setHorasAjuste("1");
+    setMinutosAjuste("0");
+    setUsuarioEmEdicao(user);
+  }
+
+  async function ajustarHoras() {
+    if (!usuarioEmEdicao) return;
+
+    const horas = Number(horasAjuste);
+    const minutos = Number(minutosAjuste);
+    const segundos = horas * 3600 + minutos * 60;
+    const totalAtual = Number(usuarioEmEdicao.total_segundos || 0);
+
+    if (
+      !Number.isInteger(horas) || horas < 0 || horas > 100000 ||
+      !Number.isInteger(minutos) || minutos < 0 || minutos > 59 ||
+      !Number.isSafeInteger(segundos) || segundos <= 0
+    ) {
+      toast.error("Informe uma duração válida em horas e minutos");
+      return;
+    }
+
+    if (operacaoHoras === "subtract" && segundos > totalAtual) {
+      toast.error("O desconto não pode deixar o total de horas abaixo de zero");
+      return;
+    }
+
+    setSalvandoAjuste(true);
+    setProcessando(usuarioEmEdicao.id);
+    try {
+      const res = await fetch("/api/admin/users", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: usuarioEmEdicao.id,
+          acao: "adjust_hours",
+          operation: operacaoHoras,
+          hours: horas,
+          minutes: minutos,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || "Não foi possível ajustar as horas");
+        return;
+      }
+
+      toast.success(data.message || "Horas ajustadas com sucesso");
+      setUsuarioEmEdicao(null);
+      await carregar();
+    } catch {
+      toast.error("Erro de conexão ao ajustar as horas");
+    } finally {
+      setSalvandoAjuste(false);
       setProcessando(null);
     }
   }
@@ -300,15 +374,29 @@ export default function UsuariosAdminPage() {
                               <p className="mt-0.5 truncate text-xs text-muted-foreground">Apelido: {u.apelido || "—"}</p>
                             </div>
                           </div>
-                          <span
-                            className={cn(
-                              "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold sm:text-[11px]",
-                              estilo.className
-                            )}
-                          >
-                            <RoleIcon size={12} />
-                            {estilo.label}
-                          </span>
+                          <div className="flex shrink-0 items-center gap-2">
+                            <span
+                              className={cn(
+                                "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold sm:text-[11px]",
+                                estilo.className
+                              )}
+                            >
+                              <RoleIcon size={12} />
+                              {estilo.label}
+                            </span>
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="outline"
+                              disabled={ocupado}
+                              onClick={() => abrirAjusteHoras(u)}
+                              title={`Ajustar horas de ${u.username}`}
+                              aria-label={`Ajustar horas de ${u.username}`}
+                              className="h-9 w-9 shrink-0 border-primary/30 text-primary hover:bg-primary/10 hover:text-primary"
+                            >
+                              <Settings2 size={16} />
+                            </Button>
+                          </div>
                         </div>
 
                         <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-white/5 pt-3 text-xs text-muted-foreground">
@@ -419,6 +507,113 @@ export default function UsuariosAdminPage() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={Boolean(usuarioEmEdicao)} onOpenChange={(open) => !open && !salvandoAjuste && setUsuarioEmEdicao(null)}>
+        <DialogContent className="w-[calc(100%-2rem)] max-w-md rounded-2xl border-border/70 bg-[#111] p-5 sm:p-6">
+          <DialogHeader className="pr-7 text-left">
+            <DialogTitle className="flex items-center gap-2 text-xl">
+              <Settings2 size={20} className="text-primary" />
+              Ajustar horas
+            </DialogTitle>
+            <DialogDescription>
+              {usuarioEmEdicao ? `Edite o total de farm de ${usuarioEmEdicao.username}.` : "Edite o total de farm do jogador."}
+            </DialogDescription>
+          </DialogHeader>
+
+          {usuarioEmEdicao && (
+            <div className="space-y-5">
+              <div className="rounded-xl border border-white/10 bg-white/[0.035] p-4">
+                <p className="text-xs text-muted-foreground">Total atual</p>
+                <p className="mt-1 font-mono text-2xl font-bold tracking-tight text-foreground">
+                  {formatHMS(Number(usuarioEmEdicao.total_segundos || 0))}
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 rounded-xl border border-white/10 bg-black/20 p-1">
+                <Button
+                  type="button"
+                  variant={operacaoHoras === "add" ? "default" : "ghost"}
+                  onClick={() => setOperacaoHoras("add")}
+                  className={cn("h-10 gap-2", operacaoHoras === "add" && "bg-primary text-primary-foreground")}
+                >
+                  <span aria-hidden="true">+</span> Adicionar
+                </Button>
+                <Button
+                  type="button"
+                  variant={operacaoHoras === "subtract" ? "default" : "ghost"}
+                  onClick={() => setOperacaoHoras("subtract")}
+                  className={cn("h-10 gap-2", operacaoHoras === "subtract" && "bg-red-500 text-white hover:bg-red-600")}
+                >
+                  <span aria-hidden="true">−</span> Descontar
+                </Button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <label className="space-y-2 text-sm font-medium">
+                  Horas
+                  <Input
+                    type="number"
+                    min="0"
+                    max="100000"
+                    step="1"
+                    inputMode="numeric"
+                    value={horasAjuste}
+                    onChange={(event) => setHorasAjuste(event.target.value)}
+                    className="h-12 bg-background text-base"
+                  />
+                </label>
+                <label className="space-y-2 text-sm font-medium">
+                  Minutos
+                  <Input
+                    type="number"
+                    min="0"
+                    max="59"
+                    step="1"
+                    inputMode="numeric"
+                    value={minutosAjuste}
+                    onChange={(event) => setMinutosAjuste(event.target.value)}
+                    className="h-12 bg-background text-base"
+                  />
+                </label>
+              </div>
+
+              {(() => {
+                const horas = Number(horasAjuste);
+                const minutos = Number(minutosAjuste);
+                const segundosAjuste = horas * 3600 + minutos * 60;
+                const duracaoValida = Number.isInteger(horas) && horas >= 0 && horas <= 100000 && Number.isInteger(minutos) && minutos >= 0 && minutos <= 59 && segundosAjuste > 0;
+                const totalAtual = Number(usuarioEmEdicao.total_segundos || 0);
+                const podeDescontar = operacaoHoras !== "subtract" || segundosAjuste <= totalAtual;
+                const novoTotal = operacaoHoras === "add" ? totalAtual + segundosAjuste : totalAtual - segundosAjuste;
+
+                return (
+                  <div className={cn("rounded-xl border p-3", duracaoValida && podeDescontar ? "border-primary/25 bg-primary/5" : "border-red-500/25 bg-red-500/5")}>
+                    <div className="flex items-center justify-between gap-3 text-sm">
+                      <span className="text-muted-foreground">Novo total previsto</span>
+                      <span className={cn("font-mono font-bold", duracaoValida && podeDescontar ? "text-primary" : "text-red-400")}>
+                        {duracaoValida && podeDescontar ? formatHMS(novoTotal) : "Confira o valor"}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                      O ajuste atualiza o ranking e preserva o histórico das sessões.
+                    </p>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button type="button" variant="outline" disabled={salvandoAjuste} onClick={() => setUsuarioEmEdicao(null)} className="h-11 sm:flex-1">
+              Cancelar
+            </Button>
+            <Button type="button" disabled={salvandoAjuste} onClick={ajustarHoras} className="h-11 sm:flex-1">
+              {salvandoAjuste ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {operacaoHoras === "add" ? "Adicionar horas" : "Descontar horas"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
