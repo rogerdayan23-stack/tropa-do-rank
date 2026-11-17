@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUserFromRequest, isManager } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase";
 import { calcularDuracaoSessao, type SessaoRow } from "@/lib/sessao";
+import { registrarAuditoria } from "@/lib/audit";
 import crypto from "crypto";
 
 function lerAjusteManualEmSegundos(detalhe: string | null): number {
@@ -325,6 +326,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Valor total inválido" }, { status: 400 });
     }
 
+    const { data: lucroAnterior, error: lucroAnteriorError } = await supabase
+      .from("lucros_diarios")
+      .select("valor_total")
+      .eq("data", data)
+      .maybeSingle();
+
+    if (lucroAnteriorError) throw lucroAnteriorError;
+
     const { error } = await supabase.from("lucros_diarios").upsert(
       {
         id: crypto.randomUUID(),
@@ -336,6 +345,13 @@ export async function POST(req: NextRequest) {
     );
 
     if (error) throw error;
+
+    await registrarAuditoria(
+      supabase,
+      user,
+      "admin:salvar_lucro_diario",
+      `Lucro de ${data} alterado de R$ ${Number(lucroAnterior?.valor_total || 0).toFixed(2)} para R$ ${valorNum.toFixed(2)}.`,
+    );
 
     return NextResponse.json({
       success: true,
