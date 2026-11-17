@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUserFromRequest, isManager } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase";
 import crypto from "crypto";
+import { registrarAuditoria } from "@/lib/audit";
 
 export async function POST(req: NextRequest) {
   const user = await getUserFromRequest();
@@ -19,7 +20,7 @@ export async function POST(req: NextRequest) {
     }
 
     const id = crypto.randomUUID();
-    await supabase.from("fechamentos_semanais").insert({
+    const { error: fechamentoError } = await supabase.from("fechamentos_semanais").insert({
       id,
       data_inicio,
       data_fim,
@@ -29,12 +30,23 @@ export async function POST(req: NextRequest) {
       fechado_por: user.id,
     });
 
+    if (fechamentoError) throw fechamentoError;
+
     // Deleta os lucros diários da semana fechada (reset da tabela principal)
-    await supabase
+    const { error: lucroDeleteError } = await supabase
       .from("lucros_diarios")
       .delete()
       .gte("data", data_inicio)
       .lte("data", data_fim);
+
+    if (lucroDeleteError) throw lucroDeleteError;
+
+    await registrarAuditoria(
+      supabase,
+      user,
+      "admin:fechar_semana",
+      `Semana ${data_inicio} a ${data_fim} arquivada. Lucro bruto: R$ ${Number(lucro_total || 0).toFixed(2)}; horas totais: ${Number(total_horas || 0)}; detalhes: ${JSON.stringify(detalhes || [])}`,
+    );
 
     return NextResponse.json({
       success: true,
@@ -46,3 +58,4 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Erro interno ao fechar semana" }, { status: 500 });
   }
 }
+
