@@ -29,19 +29,19 @@ export async function GET() {
 
   const { data, error } = await supabase
     .from("sessoes")
-    .select("*, users(apelido)")
+    .select("*")
     .in("status", ["ativa", "pausada"])
     .order("inicio", { ascending: false });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  const sessoes = (data || []).map((s: any) => ({
+  const sessoes = (data || []).map((s: SessaoRow) => ({
     id: s.id,
     user_id: s.user_id,
-    apelido: s.users?.apelido || "?",
     inicio: s.inicio,
     status: s.status,
     segundos_acumulados: s.segundos_acumulados || 0,
+    duracao: calcularDuracaoSessao(s),
     ultima_atividade: s.ultima_atividade,
   }));
 
@@ -56,6 +56,35 @@ export async function POST(req: NextRequest) {
   const agora = new Date().toISOString();
   const supabase = createServiceClient();
   const service = createServiceClient();
+
+  if (acao === "pausar" || acao === "retomar") {
+    if (!sessao_id) return NextResponse.json({ error: "Sessão não informada" }, { status: 400 });
+
+    const { data: sessao, error: fetchError } = await supabase
+      .from("sessoes")
+      .select("*")
+      .eq("id", sessao_id)
+      .maybeSingle();
+    if (fetchError || !sessao) return NextResponse.json({ error: "Sessão não encontrada" }, { status: 404 });
+
+    const statusEsperado = acao === "pausar" ? STATUS_ATIVA : STATUS_PAUSADA;
+    if (sessao.status !== statusEsperado) {
+      return NextResponse.json({ error: acao === "pausar" ? "A sessão não está ativa" : "A sessão não está pausada" }, { status: 409 });
+    }
+
+    const atualizacao = acao === "pausar"
+      ? { status: STATUS_PAUSADA, segundos_acumulados: calcularDuracaoSessao(sessao), ultima_atividade: agora }
+      : { status: STATUS_ATIVA, inicio: agora, ultima_atividade: agora, segundos_acumulados: Math.max(0, Number(sessao.segundos_acumulados) || 0) };
+    const { error: updateError } = await supabase
+      .from("sessoes")
+      .update(atualizacao)
+      .eq("id", sessao_id)
+      .eq("status", statusEsperado);
+    if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
+
+    await service.from("logs").insert({ user_id: sessao.user_id, acao: `admin:${acao}_sessao`, detalhe: sessao_id, admin_id: user!.id, criado_em: agora });
+    return NextResponse.json({ ok: true });
+  }
 
   if (acao === "pausar_todos") {
     const { data: ativas, error: listError } = await supabase.from("sessoes").select("*").eq("status", STATUS_ATIVA);
@@ -106,16 +135,36 @@ export async function POST(req: NextRequest) {
   }
 
   if (acao === "encerrar") {
-    const { data: s, error: fe } = await supabase.from("sessoes").select("*").eq("id", sessao_id).single();
-    if (fe || !s) return NextResponse.json({ error: "Sessão não encontrada" }, { status: 404 });
-    let acumulado = s.segundos_acumulados || 0;
-    if (s.status === "ativa" && s.inicio) {
-      acumulado += Math.floor((Date.now() - new Date(s.inicio).getTime()) / 1000);
+    const consulta = supabase.from("sessoes").select("*");
+    const { data: sessoesParaEncerrar, error: fetchError } = sessao_id
+      ? await consulta.eq("id", sessao_id).in("status", [STATUS_ATIVA, STATUS_PAUSADA])
+      : await consulta.in("status", [STATUS_ATIVA, STATUS_PAUSADA]);
+    if (fetchError) return NextResponse.json({ error: fetchError.message }, { status: 500 });
+    if (sessao_id && !sessoesParaEncerrar?.length) return NextResponse.json({ error: "Sessão não encontrada ou já encerrada" }, { status: 404 });
+
+    let count = 0;
+    for (const sessao of sessoesParaEncerrar || []) {
+      const acumulado = calcularDuracaoSessao(sessao);
+      const { data: encerrada, error: updateError } = await supabase
+        .from("sessoes")
+        .update({ status: STATUS_ENCERRADA, fim: agora, segundos_acumulados: acumulado, ultima_atividade: agora })
+        .eq("id", sessao.id)
+        .in("status", [STATUS_ATIVA, STATUS_PAUSADA])
+        .select("id")
+        .maybeSingle();
+      if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
+      if (!encerrada) continue;
+
+      const { data: usr, error: userError } = await service.from("users").select("total_segundos").eq("id", sessao.user_id).single();
+      if (userError) return NextResponse.json({ error: userError.message }, { status: 500 });
+      const novoTotal = Number(usr?.total_segundos || 0) + acumulado;
+      const { error: totalError } = await service.from("users").update({ total_segundos: novoTotal }).eq("id", sessao.user_id);
+      if (totalError) return NextResponse.json({ error: totalError.message }, { status: 500 });
+      count++;
     }
-    await supabase.from("sessoes").update({ status: "encerrada", fim: agora, segundos_acumulados: acumulado }).eq("id", sessao_id);
-    const { data: usr } = await service.from("users").select("total_segundos").eq("id", s.user_id).single();
-    const novoTotal = ((usr?.total_segundos as number) || 0) + acumulado;
-    await service.from("users").update({ total_segundos: novoTotal }).eq("id", s.user_id);
+
+    await service.from("logs").insert({ user_id: user!.id, acao: sessao_id ? "admin:encerrar_sessao" : "admin:encerrar_todas", detalhe: `${count} sessões encerradas`, admin_id: user!.id, criado_em: agora });
+    return NextResponse.json({ ok: true, count });
   } else if (acao === "ajustar") {
     const ajuste = (minutos || 0) * 60;
     const { data: s } = await supabase.from("sessoes").select("segundos_acumulados").eq("id", sessao_id).single();
@@ -135,3 +184,4 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ ok: true });
 }
+
