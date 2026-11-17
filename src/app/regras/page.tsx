@@ -33,7 +33,7 @@ export default function RegrasPage() {
       const regras = await resRegras.json();
       const me = await resMe.json();
       setTexto(regras.texto || "");
-      setIsAdmin(me.user?.is_admin === true || me.user?.role === "admin");
+      setIsAdmin(me.user?.role === "admin");
     } catch {
       // silencioso
     } finally {
@@ -76,7 +76,7 @@ export default function RegrasPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Regras</h1>
-          <p className="text-muted-foreground">Regras do Rank Farm</p>
+          <p className="text-muted-foreground">Regras do Rank dos Cuiudos</p>
         </div>
         {isAdmin && (
           <Button onClick={() => setEditando(!editando)} variant="outline" size="sm">

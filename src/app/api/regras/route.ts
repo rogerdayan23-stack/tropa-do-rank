@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase";
 import { createServiceClient } from "@/lib/supabase";
-import { getUserFromRequest, isAdminUser } from "@/lib/auth";
+import { getUserFromRequest, isAdminRole } from "@/lib/auth";
 
 export async function GET() {
   const user = await getUserFromRequest();
@@ -17,7 +17,7 @@ export async function GET() {
 
 export async function PUT(req: NextRequest) {
   const user = await getUserFromRequest();
-  if (!user || !isAdminUser(user)) return NextResponse.json({ error: "Acesso negado" }, { status: 403 });
+  if (!user || !isAdminRole(user)) return NextResponse.json({ error: "Acesso negado" }, { status: 403 });
 
   const { texto } = await req.json();
   const agora = new Date().toISOString();

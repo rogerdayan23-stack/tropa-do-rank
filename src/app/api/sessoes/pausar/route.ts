@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { getUserFromRequest } from "@/lib/auth";
+import { STATUS_PAUSADA, calcularDuracaoSessao, logContagemSessao } from "@/lib/sessao";
 
 export async function POST(req: NextRequest) {
   const user = await getUserFromRequest();
@@ -25,17 +26,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Sessão ativa não encontrada" }, { status: 404 });
   }
 
-  const inicio = new Date(sessao.inicio).getTime();
-  const acumulado = (sessao.segundos_acumulados || 0) + Math.floor((Date.now() - inicio) / 1000);
-
+  const segundosAcumulados = calcularDuracaoSessao(sessao);
   const { data, error } = await service
     .from("sessoes")
-    .update({ status: "pausada", segundos_acumulados: acumulado, ultima_atividade: agora })
+    .update({ status: STATUS_PAUSADA, segundos_acumulados: segundosAcumulados, ultima_atividade: agora })
     .eq("id", id)
     .select()
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  return NextResponse.json({ sessao: { id: data.id, status: data.status, segundos_acumulados: data.segundos_acumulados } });
+  logContagemSessao(data.id, data.segundos_acumulados || 0, "pausada-manual");
+
+  return NextResponse.json({
+    sessao: { id: data.id, status: data.status, segundos_acumulados: data.segundos_acumulados },
+  });
 }

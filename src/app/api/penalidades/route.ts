@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getUserFromRequest, isAdminUser } from "@/lib/auth";
+import { getUserFromRequest, isManager } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase";
 import crypto from "crypto";
 
@@ -49,7 +49,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const user = await getUserFromRequest();
-  if (!user || !isAdminUser(user)) {
+  if (!user || !isManager(user)) {
     return NextResponse.json({ error: "Apenas administradores podem aplicar penalidades" }, { status: 403 });
   }
 
@@ -107,7 +107,7 @@ export async function POST(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   const user = await getUserFromRequest();
-  if (!user || !isAdminUser(user)) {
+  if (!user || !isManager(user)) {
     return NextResponse.json({ error: "Apenas administradores podem remover penalidades" }, { status: 403 });
   }
 

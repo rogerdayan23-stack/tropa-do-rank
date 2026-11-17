@@ -48,8 +48,8 @@ O primeiro usuário cadastrado se torna automaticamente o **admin**.
 1. **Login**: informe um apelido único (sem senha). Se não existir, o usuário é criado automaticamente. A sessão persiste via cookie (`tropa_session`).
 2. **Dashboard**: clique em **INICIAR FARM** para criar uma sessão ativa. O cronômetro é calculado no servidor (`segundos_acumulados + (now() - inicio)`). Use Pausar / Retomar / Parar.
 3. **Persistência**: ao fechar e reabrir o navegador, a sessão ativa é mantida.
-4. **Timeout automático**: sessões acima de 8h são encerradas pelo cron do Vercel (a cada 1 min).
-5. **Heartbeat**: o frontend envia POST a cada 60s; sem atividade por 15 min, a pausa é automática (aviso exibido).
+4. **Limite de sessão**: sessões ativas são encerradas ao atingir 5h. A aplicação também verifica sessões vencidas quando o painel do jogador ou o monitoramento administrativo é consultado.
+5. **Heartbeat**: o frontend envia POST a cada 60s; as consultas do painel verificam o limite e fecham sessões vencidas.
 6. **Histórico**: sessões encerradas com filtros por período.
 7. **Ranking**: top usuários com medalhas 🥇🥈🥉.
 8. **Perfil**: total, média por sessão, streak e gráfico de 7 dias.
@@ -60,8 +60,8 @@ O primeiro usuário cadastrado se torna automaticamente o **admin**.
 
 1. Faça push do código para um repositório GitHub.
 2. Importe o repositório na [Vercel](https://vercel.com).
-3. Adicione as mesmas variáveis de ambiente (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`) nas **Settings > Environment Variables** da Vercel.
-4. O arquivo [`vercel.json`](./vercel.json) configura o Cron que roda `/api/cron/timeout` a cada minuto. Ative o Cron no painel da Vercel (Dashboard > Project > Cron Jobs).
+3. Adicione as variáveis `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `JWT_SECRET` e `CRON_SECRET` em **Settings > Environment Variables** da Vercel. Use valores fortes para as chaves e nunca as coloque no GitHub.
+4. O arquivo [`vercel.json`](./vercel.json) agenda uma limpeza diária em `/api/cron/timeout`, compatível com o plano Hobby da Vercel. A limpeza imediata de sessões vencidas também ocorre quando os painéis consultam os dados.
 5. Rode `npm run build` localmente para verificar se não há erros de TypeScript antes de fazer push.
 
 ## Scripts
@@ -96,7 +96,7 @@ src/
 
 - Apelido único, sem senha.
 - Sessão ativa calculada no servidor.
-- Limite de 8h por sessão (expiração automática).
-- Heartbeat de 60s; pausa após 15min sem atividade.
+- Limite de 5h por sessão (expiração automática).
+- Heartbeat de 60s; sessões vencidas são verificadas no painel e pelo cron diário.
 - Primeiro usuário cadastrado = admin.
 - Regras editáveis apenas pelo admin.

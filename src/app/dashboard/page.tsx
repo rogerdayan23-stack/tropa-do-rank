@@ -5,8 +5,9 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Play, Pause, Square, Timer, Clock, AlertTriangle, DollarSign, Shield } from "lucide-react";
+import { Play, Pause, Square, Timer, Clock, AlertTriangle, DollarSign, Shield, Users } from "lucide-react";
 import { toast } from "sonner";
+import { LIMITE_SESSAO_SEGUNDOS } from "@/lib/sessao";
 
 function formatHMS(segundos: number) {
   const h = Math.floor(segundos / 3600);
@@ -31,7 +32,10 @@ export default function DashboardPage() {
   const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
-    fetch("/api/auth/me").then(r => r.json()).then(d => setIsAdmin(!!d.user?.is_admin)).catch(() => {});
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((d) => setIsAdmin(d.user?.role === "admin"))
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -62,7 +66,7 @@ export default function DashboardPage() {
           setSessao(null);
           setStatusAtual("expirada");
           setExpirada(true);
-          toast.error("Sessão expirada por tempo limite (8h)");
+          toast.error(`Sessão expirada por tempo limite (${LIMITE_SESSAO_SEGUNDOS / 3600}h)`);
         } else {
           setSessao(null);
           setStatusAtual(null);
@@ -91,7 +95,7 @@ export default function DashboardPage() {
         const agora = Date.now();
         const desdeInicio = Math.floor((agora - new Date(inicioAtual).getTime()) / 1000);
         setSegundos((segundosBase || 0) + desdeInicio);
-        if ((segundosBase || 0) + desdeInicio >= 8 * 3600) {
+        if ((segundosBase || 0) + desdeInicio >= LIMITE_SESSAO_SEGUNDOS) {
           setExpirada(true);
         }
       };
@@ -166,22 +170,74 @@ export default function DashboardPage() {
     }
   };
 
+  const pausarTodos = async () => {
+    if (!window.confirm("Pausar todas as sessões ativas da Tropa?")) return;
+    try {
+      const res = await fetch("/api/sessoes/pausar-todos", { method: "POST", body: JSON.stringify({ acao: "pausar_todos" }) });
+      if (res.ok) {
+        const data = await res.json();
+        toast.success(`${data.count || 0} sessões pausadas`);
+      } else toast.error("Erro ao pausar todos");
+    } catch {
+      toast.error("Erro de conexão");
+    }
+  };
+
+  const despausarTodos = async () => {
+    if (!window.confirm("Despausar todas as sessões da Tropa?")) return;
+    try {
+      const res = await fetch("/api/sessoes/pausar-todos", { method: "POST", body: JSON.stringify({ acao: "despausar_todos" }) });
+      if (res.ok) {
+        const data = await res.json();
+        toast.success(`${data.count || 0} sessões retomadas`);
+      } else toast.error("Erro ao despausar todos");
+    } catch {
+      toast.error("Erro de conexão");
+    }
+  };
+
+  const contagem = async () => {
+    try {
+      const res = await fetch("/api/admin/sessoes", { method: "POST", body: JSON.stringify({ acao: "contagem" }) });
+      if (res.ok) {
+        const data = await res.json();
+        toast.success(`Contagem: ${data.atualizadas} atualizadas, ${data.expiradas} expiradas`);
+      } else toast.error("Erro na contagem");
+    } catch {
+      toast.error("Erro de conexão");
+    }
+  };
+
   const temSessaoAtivaOuPausada = statusAtual === "ativa" || statusAtual === "pausada";
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 pl-12 sm:pl-0">
+          <h1 className="text-3xl font-bold tracking-tight">Início</h1>
           <p className="text-muted-foreground">Controle suas sessões de farm</p>
         </div>
-        <div className="flex gap-2">
+        <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:justify-end">
           {!temSessaoAtivaOuPausada ? (
-            <Button onClick={iniciar} disabled={loading} className="h-12 px-8 bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 transition-all font-bold text-lg">
+            <Button onClick={iniciar} disabled={loading} className="col-span-2 h-12 px-4 bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 transition-all font-bold text-base sm:col-span-1 sm:px-8 sm:text-lg">
               <Play size={24} className="mr-2" />
               INICIAR FARM
             </Button>
           ) : null}
+
+          {isAdmin && (
+            <>
+              <Button onClick={pausarTodos} disabled={loading} variant="outline" className="h-11 px-2 text-xs border-orange-500/40 text-orange-400 hover:bg-orange-500/10 sm:h-12 sm:px-4 sm:text-sm">
+                <Pause size={18} className="mr-2" /> Pausar Todos
+              </Button>
+              <Button onClick={despausarTodos} disabled={loading} variant="outline" className="h-11 px-2 text-xs border-green-500/40 text-green-400 hover:bg-green-500/10 sm:h-12 sm:px-4 sm:text-sm">
+                <Play size={18} className="mr-2" /> Despausar Todos
+              </Button>
+              <Button onClick={contagem} disabled={loading} variant="outline" className="h-11 px-2 text-xs border-primary/40 text-primary hover:bg-primary/10 sm:h-12 sm:px-4 sm:text-sm">
+                <Clock size={18} className="mr-2" /> Contar
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
@@ -209,7 +265,7 @@ export default function DashboardPage() {
             {expirada && (
               <div className="mt-4 p-3 rounded bg-destructive/10 border border-destructive/20 flex items-center gap-2 text-destructive">
                 <AlertTriangle size={18} />
-                <span className="text-sm font-medium">Sessão expirada (limite de 8h atingido)</span>
+                <span className="text-sm font-medium">Sessão expirada (limite de 5h atingido)</span>
               </div>
             )}
           </CardContent>
@@ -245,11 +301,11 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent className="space-y-2">
             <div className="w-full bg-secondary rounded-full h-2">
-              <div className={`bg-primary h-2 rounded-full transition-all duration-1000`} style={{ width: Math.min((segundos / (8 * 3600)) * 100, 100) }}></div>
+              <div className={`bg-primary h-2 rounded-full transition-all duration-1000`} style={{ width: `${Math.min((segundos / LIMITE_SESSAO_SEGUNDOS) * 100, 100)}%` }}></div>
             </div>
             <div className="flex justify-between text-xs text-muted-foreground">
               <span>00:00</span>
-              <span>08:00 (limite)</span>
+              <span>05:00 (limite)</span>
             </div>
           </CardContent>
         </Card>

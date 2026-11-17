@@ -218,13 +218,83 @@ export default function RankingPage() {
         </div>
       </div>
 
-      {/* Pódio */}
-      {loading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-5 items-end">
-          {[0, 1, 2].map((i) => (
-            <div key={i} className="h-56 animate-pulse rounded-2xl border border-border/40 bg-card/40" />
-          ))}
+      {/* Pódio mobile: campeão em destaque e demais posições compactas */}
+      {!loading && top3.length > 0 && (
+        <div className="space-y-3 pt-3 md:hidden">
+          {top3[0] && (
+            <article className="relative overflow-hidden rounded-3xl border border-yellow-400/50 bg-gradient-to-br from-yellow-400/[0.18] via-amber-500/[0.07] to-card p-5 shadow-[0_12px_45px_rgba(250,204,21,0.08)]">
+              <div className="pointer-events-none absolute -right-10 -top-14 h-40 w-40 rounded-full bg-yellow-400/10 blur-3xl" />
+              <div className="relative flex items-center gap-4">
+                <div className="relative shrink-0 rounded-full p-1 ring-2 ring-yellow-400/70 ring-offset-2 ring-offset-[#111]">
+                  <Avatar url={top3[0].avatar_url} nome={nomeJogador(top3[0])} size="lg" />
+                  <span className="absolute -bottom-1 -right-1 flex h-8 w-8 items-center justify-center rounded-full border-2 border-[#111] bg-yellow-400 text-black shadow-lg">
+                    <Crown size={16} />
+                  </span>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <span className="inline-flex items-center gap-1 rounded-full border border-yellow-400/30 bg-yellow-400/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-yellow-200">
+                    <Trophy size={11} /> Líder da tropa
+                  </span>
+                  <h2 className="mt-2 truncate text-xl font-black tracking-tight text-white">{nomeJogador(top3[0])}</h2>
+                  <p className="text-xs text-yellow-200/70">1º lugar · campeão</p>
+                </div>
+              </div>
+              <div className="relative mt-5 flex items-end justify-between gap-3 rounded-2xl border border-white/5 bg-black/35 px-4 py-3">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-yellow-100/60">Tempo total de farm</p>
+                  <p className="mt-1 font-mono text-2xl font-black tracking-tight text-yellow-300">{formatHMS(top3[0].total_segundos)}</p>
+                </div>
+                <div className="pb-1 text-right">
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Vantagem</p>
+                  <p className="font-mono text-sm font-bold text-white">{formatHMS(top3[0].total_segundos - (top3[1]?.total_segundos || 0))}</p>
+                </div>
+              </div>
+            </article>
+          )}
+
+          {top3.length > 1 && (
+            <div className="grid grid-cols-2 gap-3">
+              {top3.slice(1).map((u) => {
+                const vice = u.posicao === 2;
+                return (
+                  <article key={u.posicao} className={cn(
+                    "min-w-0 rounded-2xl border p-3.5",
+                    vice ? "border-slate-300/30 bg-gradient-to-br from-slate-300/[0.10] to-card" : "border-amber-700/40 bg-gradient-to-br from-amber-700/[0.13] to-card"
+                  )}>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-black", vice ? "bg-slate-200 text-slate-900" : "bg-amber-700 text-white")}>{u.posicao}º</span>
+                      {vice ? <Medal size={15} className="text-slate-200" /> : <Medal size={15} className="text-amber-500" />}
+                    </div>
+                    <div className="mt-3 flex items-center gap-2.5">
+                      <Avatar url={u.avatar_url} nome={nomeJogador(u)} size="sm" />
+                      <p className="min-w-0 truncate text-sm font-bold text-foreground">{nomeJogador(u)}</p>
+                    </div>
+                    <p className="mt-3 font-mono text-sm font-bold text-foreground">{formatHMS(u.total_segundos)}</p>
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{vice ? "Vice-campeão" : "3º lugar"}</p>
+                  </article>
+                );
+              })}
+            </div>
+          )}
         </div>
+      )}
+
+      {/* Pódio para telas maiores */}
+      {loading ? (
+        <>
+          <div className="space-y-3 pt-3 md:hidden">
+            <div className="h-40 animate-pulse rounded-3xl border border-border/40 bg-card/40" />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="h-28 animate-pulse rounded-2xl border border-border/40 bg-card/40" />
+              <div className="h-28 animate-pulse rounded-2xl border border-border/40 bg-card/40" />
+            </div>
+          </div>
+          <div className="hidden md:grid md:grid-cols-3 gap-4 sm:gap-5 items-end">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="h-56 animate-pulse rounded-2xl border border-border/40 bg-card/40" />
+            ))}
+          </div>
+        </>
       ) : top3.length === 0 ? (
         <Card className="border-dashed">
           <CardContent className="flex h-56 flex-col items-center justify-center gap-3 text-muted-foreground">
@@ -233,7 +303,7 @@ export default function RankingPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-5 items-end pt-4">
+        <div className="hidden md:grid md:grid-cols-3 gap-4 sm:gap-5 items-end pt-4">
           {ordem.map((u) => (
             <div
               key={u.posicao}
@@ -260,7 +330,7 @@ export default function RankingPage() {
             </span>
           </div>
 
-          <div className="overflow-x-auto">
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full min-w-[620px] text-sm">
               <thead>
                 <tr className="border-b border-border/50 bg-white/[0.02] text-left">
@@ -324,6 +394,34 @@ export default function RankingPage() {
                 })}
               </tbody>
             </table>
+          </div>
+          <div className="space-y-2 p-3 md:hidden">
+            {demais.map((u) => {
+              const progresso = lider > 0 ? Math.min(100, (u.total_segundos / lider) * 100) : 0;
+              return (
+                <article key={u.posicao} className="rounded-xl border border-border/60 bg-white/[0.025] p-3.5">
+                  <div className="flex items-center gap-3">
+                    <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-border/60 bg-white/5 font-mono text-xs font-bold text-muted-foreground">
+                      {u.posicao}
+                    </span>
+                    <Avatar url={u.avatar_url} nome={nomeJogador(u)} size="sm" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-semibold text-foreground">{nomeJogador(u)}</p>
+                      <p className="text-[11px] text-muted-foreground">{progresso.toFixed(0)}% do líder</p>
+                    </div>
+                    <span className="shrink-0 font-mono text-xs font-semibold text-primary sm:text-sm">
+                      {formatHMS(u.total_segundos)}
+                    </span>
+                  </div>
+                  <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/5">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-green-500 to-emerald-400 transition-all duration-700 ease-out"
+                      style={{ width: `${progresso}%` }}
+                    />
+                  </div>
+                </article>
+              );
+            })}
           </div>
         </Card>
       )}

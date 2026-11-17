@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Menu, User, Clock, Trophy, Activity, Shield, LogOut, ChevronDown, DollarSign, AlertTriangle } from "lucide-react";
+import { Menu, User, Clock, Trophy, Activity, Shield, LogOut, ChevronDown, DollarSign, AlertTriangle, Crown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
@@ -71,11 +71,11 @@ export function Navbar() {
     <nav className="fixed top-0 left-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur-md">
       <div className="max-w-7xl mx-auto flex items-center justify-between px-4 sm:px-6 h-16">
         <Link href="/dashboard" className="flex items-center gap-2.5 transition-opacity hover:opacity-90">
-          <div className="h-9 w-9 rounded-xl bg-primary flex items-center justify-center text-primary-foreground font-extrabold text-sm shadow-md shadow-primary/20">
-            RF
+          <div className="h-9 w-9 rounded-xl border border-yellow-400/35 bg-gradient-to-br from-emerald-500/20 to-yellow-400/10 flex items-center justify-center text-yellow-300 shadow-md shadow-yellow-500/10">
+            <Crown size={19} />
           </div>
-          <span className="font-extrabold text-xl tracking-tight text-foreground">
-            RANK <span className="text-primary">FARM</span>
+          <span className="whitespace-nowrap text-sm sm:text-base font-black tracking-tight text-foreground">
+            RANK DOS <span className="text-primary">CUIUDOS</span>
           </span>
         </Link>
 

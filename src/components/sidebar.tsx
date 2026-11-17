@@ -15,6 +15,8 @@ import {
   Menu,
   X,
   ChevronRight,
+  UserCog,
+  Crown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -27,7 +29,7 @@ interface NavUser {
 }
 
 const navItems = [
-  { label: "Dashboard", href: "/dashboard", icon: Clock },
+  { label: "Início", href: "/dashboard", icon: Clock },
   { label: "Histórico", href: "/historico", icon: Activity },
   { label: "Ranking", href: "/ranking", icon: Trophy },
   { label: "Regras", href: "/regras", icon: Shield },
@@ -36,6 +38,11 @@ const navItems = [
 const adminItems = [
   { label: "Penalidades", href: "/penalidades", icon: AlertTriangle },
   { label: "Saldos", href: "/saldos", icon: DollarSign },
+];
+
+const adminPanelItems = [
+  { label: "Gerenciar Usuários", href: "/admin/usuarios", icon: UserCog },
+  { label: "Monitoramento", href: "/admin/monitoramento", icon: Clock },
 ];
 
 export function Sidebar() {
@@ -108,12 +115,12 @@ export function Sidebar() {
     <div className="flex flex-col h-full">
       {/* Logo */}
       <div className="flex items-center gap-3 px-4 py-5 border-b border-border/40">
-        <div className="w-9 h-9 bg-primary rounded-lg flex items-center justify-center font-bold text-black text-sm flex-shrink-0">
-          RF
+        <div className="relative flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border border-yellow-400/35 bg-gradient-to-br from-emerald-500/20 to-yellow-400/10 shadow-[0_0_18px_rgba(234,179,8,0.12)]">
+          <Crown size={21} strokeWidth={2.2} className="text-yellow-300" />
         </div>
-        <div>
-          <p className="font-bold text-sm tracking-wide">RANK FARM</p>
-          <p className="text-xs text-muted-foreground">Free Fire</p>
+        <div className="min-w-0">
+          <p className="whitespace-nowrap text-[11px] font-black tracking-[0.08em] text-foreground">RANK DOS CUIUDOS</p>
+          <p className="text-xs text-muted-foreground">Não tem essa!</p>
         </div>
       </div>
 
@@ -134,6 +141,19 @@ export function Sidebar() {
         {adminItems.map((item) => (
           <NavLink key={item.href} {...item} />
         ))}
+
+        {user?.role === "admin" && (
+          <>
+            <div className="pt-4 pb-1">
+              <p className="text-xs font-semibold text-muted-foreground/60 uppercase tracking-wider px-3 mb-2">
+                Admin
+              </p>
+            </div>
+            {adminPanelItems.map((item) => (
+              <NavLink key={item.href} {...item} />
+            ))}
+          </>
+        )}
       </nav>
 
       {/* User info + logout */}
@@ -154,7 +174,11 @@ export function Sidebar() {
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium truncate">{user?.username || "..."}</p>
             <p className="text-xs text-muted-foreground">
-              {user?.is_admin ? "👑 Admin" : "Jogador"}
+              {user?.role === "admin"
+                ? "👑 Admin Master"
+                : user?.role === "moderador"
+                ? "🛡️ Co-Admin"
+                : "Jogador"}
             </p>
           </div>
           <User size={14} className="text-muted-foreground group-hover:text-foreground" />

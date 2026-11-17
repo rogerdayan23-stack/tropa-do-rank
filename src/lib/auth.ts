@@ -2,7 +2,7 @@ import { cookies, headers } from "next/headers";
 import jwt from "jsonwebtoken";
 import { createServiceClient } from "@/lib/supabase";
 
-const JWT_SECRET = process.env.JWT_SECRET || "chave_padrao_rank_farm_2026";
+const JWT_SECRET = process.env.JWT_SECRET;
 
 // Colunas reais da tabela users (o schema usa "criado_em", não "created_at")
 const USER_COLUMNS = "id, username, role, is_admin, avatar_url, criado_em, total_segundos";
@@ -54,42 +54,36 @@ export async function getUserFromRequest(): Promise<AppUser | null> {
     }
 
     if (!token) return null;
+    if (!JWT_SECRET || JWT_SECRET.length < 32) return null;
 
     const supabase = createServiceClient();
 
-    // 1) Token JWT (login por usuário/senha em /api/login)
-    try {
-      const decoded = jwt.verify(token, JWT_SECRET) as { id?: string };
-      if (decoded && decoded.id) {
-        const { data } = await supabase
-          .from("users")
-          .select(USER_COLUMNS)
-          .eq("id", decoded.id)
-          .maybeSingle();
-
-        if (data) return mapearUsuario(data);
-      }
-    } catch {
-      // Token opaco (não-JWT): segue para a busca por session_token
-    }
-
-    // 2) Token opaco salvo em users.session_token (login por apelido)
+    const decoded = jwt.verify(token, JWT_SECRET) as { id?: string };
+    if (!decoded?.id) return null;
     const { data } = await supabase
       .from("users")
       .select(USER_COLUMNS)
-      .eq("session_token", token)
+      .eq("id", decoded.id)
       .maybeSingle();
-
-    if (data) return mapearUsuario(data);
-
-    return null;
+    return data ? mapearUsuario(data) : null;
   } catch {
     return null;
   }
 }
 
+// Admin Master: apenas role === "admin"
+export function isAdminRole(user: AppUser | null | undefined): boolean {
+  return !!user && user.role === "admin";
+}
+
+// Admin (compatível com o antigo is_admin)
 export function isAdminUser(user: AppUser | null | undefined): boolean {
-  return !!user && (user.is_admin === true || user.role === "admin");
+  return isAdminRole(user) || user?.is_admin === true;
+}
+
+// Co-Admin: admin + moderador (podem gerenciar saldos e penalidades)
+export function isManager(user: AppUser | null | undefined): boolean {
+  return isAdminUser(user) || user?.role === "moderador";
 }
 
 export function generateToken(): string {

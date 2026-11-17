@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { getUserFromRequest } from "@/lib/auth";
+import { STATUS_PAUSADA, STATUS_ATIVA, construirAtualizacaoSessao, logContagemSessao } from "@/lib/sessao";
 
 export async function POST(req: NextRequest) {
   const user = await getUserFromRequest();
@@ -14,16 +15,37 @@ export async function POST(req: NextRequest) {
   const agora = new Date().toISOString();
   const service = createServiceClient();
 
-  const { data, error } = await service
+  const { data: sessao, error: fetchError } = await service
     .from("sessoes")
-    .update({ inicio: agora, status: "ativa", ultima_atividade: agora })
+    .select("*")
     .eq("id", id)
     .eq("user_id", user.id)
-    .in("status", ["pausada"])
+    .single();
+
+  if (fetchError || !sessao || sessao.status !== STATUS_PAUSADA) {
+    return NextResponse.json({ error: "Sessão pausada não encontrada" }, { status: 404 });
+  }
+
+  // Acumula o tempo que já havia sido pausado antes de retomar
+  const { update } = construirAtualizacaoSessao(sessao, agora);
+  const { data, error } = await service
+    .from("sessoes")
+    .update({
+      inicio: agora,
+      status: STATUS_ATIVA,
+      ultima_atividade: agora,
+      segundos_acumulados: update.segundos_acumulados,
+    })
+    .eq("id", id)
+    .eq("user_id", user.id)
     .select()
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  return NextResponse.json({ sessao: { id: data.id, inicio: data.inicio, status: data.status } });
+  logContagemSessao(data.id, data.segundos_acumulados || 0, "retomada-manual");
+
+  return NextResponse.json({
+    sessao: { id: data.id, inicio: data.inicio, status: data.status, segundos_acumulados: data.segundos_acumulados },
+  });
 }

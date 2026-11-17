@@ -97,7 +97,7 @@ export default function PenalidadesPage() {
       const pen = await resPen.json();
       const jog = await resJog.json();
 
-      setIsAdmin(me.user?.is_admin === true || me.user?.role === "admin");
+      setIsAdmin(me.user?.role === "admin" || me.user?.role === "moderador");
       setPenalidades(pen.penalidades || []);
       setJogadores(jog.jogadores || []);
     } catch {

@@ -2,10 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Clock, Filter, Activity } from "lucide-react";
+import { Clock, Activity } from "lucide-react";
 
 function formatHMS(segundos: number) {
   const h = Math.floor(segundos / 3600);
@@ -67,19 +66,19 @@ export default function HistoricoPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="pl-12 sm:pl-0">
           <h1 className="text-3xl font-bold tracking-tight">Histórico</h1>
           <p className="text-muted-foreground">Suas sessões encerradas</p>
         </div>
-        <div className="flex gap-2">
+        <div className="grid w-full grid-cols-4 gap-1 sm:flex sm:w-auto sm:gap-2">
           {["hoje", "semana", "mes", "tudo"].map((f) => (
             <Button
               key={f}
               onClick={() => setFiltro(f)}
               variant={filtro === f ? "default" : "outline"}
               size="sm"
-              className={cnVoid(filtro === f ? "bg-primary text-primary-foreground" : "")}
+              className={`min-w-0 px-2 text-xs sm:px-3 sm:text-sm ${filtro === f ? "bg-primary text-primary-foreground" : ""}`}
             >
               {filtroLabel[f]}
             </Button>
@@ -122,39 +121,27 @@ export default function HistoricoPage() {
               <p>Nenhuma sessão encontrada neste período</p>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Data</TableHead>
-                  <TableHead>Início</TableHead>
-                  <TableHead>Fim</TableHead>
-                  <TableHead>Duração</TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+          <div className="space-y-3">
                 {sessoes.map((s) => (
-                  <TableRow key={s.id}>
-                    <TableCell>{formatData(s.inicio || s.fim || "")}</TableCell>
-                    <TableCell className="font-mono text-xs">{new Date(s.inicio || "").toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</TableCell>
-                    <TableCell className="font-mono text-xs">{s.fim ? new Date(s.fim).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "—"}</TableCell>
-                    <TableCell className="font-mono font-semibold">{formatHMS(s.duracao || 0)}</TableCell>
-                    <TableCell>
+                  <div key={s.id} className="rounded-xl border border-border/60 bg-white/[0.02] p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold">{formatData(s.inicio || s.fim || "")}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">{new Date(s.inicio || "").toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })} – {s.fim ? new Date(s.fim).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "—"}</p>
+                      </div>
                       <Badge variant={s.status === "encerrada" ? "secondary" : "destructive"}>
                         {s.status === "encerrada" ? "Encerrada" : "Expirada"}
                       </Badge>
-                    </TableCell>
-                  </TableRow>
+                    </div>
+                    <div className="mt-3 flex items-center gap-2 border-t border-white/5 pt-3 text-sm text-muted-foreground">
+                      <Clock size={14} /> Duração <span className="ml-auto font-mono font-semibold text-foreground">{formatHMS(s.duracao || 0)}</span>
+                    </div>
+                  </div>
                 ))}
-              </TableBody>
-            </Table>
+          </div>
           )}
         </CardContent>
       </Card>
     </div>
   );
-}
-
-function cnVoid(...classes: string[]) {
-  return classes.filter(Boolean).join(" ");
 }

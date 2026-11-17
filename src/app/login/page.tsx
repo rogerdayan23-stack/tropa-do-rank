@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { User, Lock, ShieldCheck, ArrowRight, Gamepad2, Loader2, Eye, EyeOff } from "lucide-react";
+import { User, Lock, ShieldCheck, ArrowRight, Crown, Loader2, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 
 export default function AuthPage() {
@@ -126,10 +126,10 @@ export default function AuthPage() {
       <Card className="w-full max-w-md shadow-2xl border-border/60 bg-[#121212]/90 backdrop-blur-md">
         <CardHeader className="text-center space-y-2 pb-4">
           <div className="h-12 w-12 rounded-xl bg-primary/20 border border-primary/40 flex items-center justify-center text-primary mx-auto font-bold shadow-lg shadow-primary/10">
-            <Gamepad2 size={26} />
+            <Crown size={26} strokeWidth={2.2} />
           </div>
           <CardTitle className="text-2xl font-black tracking-tight text-foreground">
-            RANK FARM
+            RANK DOS CUIUDOS
           </CardTitle>
           <CardDescription className="text-muted-foreground text-sm">
             Sistema Oficial de Farm & Divisão de Lucros

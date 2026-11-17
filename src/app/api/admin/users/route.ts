@@ -1,0 +1,237 @@
+import { NextRequest, NextResponse } from "next/server";
+import { getUserFromRequest, isAdminRole } from "@/lib/auth";
+import { createServiceClient } from "@/lib/supabase";
+
+const USER_COLUMNS = "id, username, apelido, role, is_admin, avatar_url, criado_em, total_segundos";
+const ROLES_VALIDAS = ["user", "moderador", "admin"];
+
+async function requireAdmin() {
+  const user = await getUserFromRequest();
+  if (!user) {
+    return { response: NextResponse.json({ error: "Não autenticado" }, { status: 401 }), user: null };
+  }
+  if (!isAdminRole(user)) {
+    return { response: NextResponse.json({ error: "Acesso restrito ao Admin Master" }, { status: 403 }), user: null };
+  }
+  return { response: null, user };
+}
+
+async function contarAdmins(supabase: ReturnType<typeof createServiceClient>) {
+  const { count } = await supabase
+    .from("users")
+    .select("id", { count: "exact", head: true })
+    .eq("role", "admin");
+  return count || 0;
+}
+
+async function registrarLog(
+  supabase: ReturnType<typeof createServiceClient>,
+  adminId: string,
+  acao: string,
+  detalhe: string,
+  alvoId: string
+) {
+  await supabase.from("logs").insert({
+    user_id: alvoId,
+    admin_id: adminId,
+    acao,
+    detalhe,
+    criado_em: new Date().toISOString(),
+  });
+}
+
+export async function GET() {
+  const { response } = await requireAdmin();
+  if (response) return response;
+
+  const supabase = createServiceClient();
+  const { data, error } = await supabase
+    .from("users")
+    .select(USER_COLUMNS)
+    .order("criado_em", { ascending: false });
+
+  if (error) {
+    console.error("[ADMIN/USERS] Erro ao listar usuários:", error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ users: data || [] });
+}
+
+export async function PATCH(req: NextRequest) {
+  const { response, user: admin } = await requireAdmin();
+  if (response) return response;
+
+  const supabase = createServiceClient();
+
+  try {
+    const body = await req.json();
+    const { user_id, acao, role } = body;
+
+    if (!user_id || typeof user_id !== "string") {
+      return NextResponse.json({ error: "Usuário inválido" }, { status: 400 });
+    }
+
+    if (user_id === admin.id) {
+      return NextResponse.json(
+        { error: "Você não pode executar esta ação na sua própria conta" },
+        { status: 403 }
+      );
+    }
+
+    const { data: alvo, error: alvoError } = await supabase
+      .from("users")
+      .select(USER_COLUMNS)
+      .eq("id", user_id)
+      .maybeSingle();
+
+    if (alvoError) throw alvoError;
+    if (!alvo) return NextResponse.json({ error: "Usuário não encontrado" }, { status: 404 });
+
+    if (acao === "reset") {
+      // Zera horas e saldos: apaga sessões, pagamentos e penalidades do jogador
+      const [sessoes, pagamentos, penalidades] = await Promise.all([
+        supabase.from("sessoes").delete().eq("user_id", user_id),
+        supabase.from("pagamentos").delete().eq("user_id", user_id),
+        supabase.from("penalidades").delete().eq("user_id", user_id),
+      ]);
+
+      const falhas = [sessoes.error, pagamentos.error, penalidades.error].filter(Boolean);
+      if (falhas.length > 0) {
+        console.error("[ADMIN/USERS] Erro ao zerar estatísticas:", falhas);
+        return NextResponse.json({ error: "Erro ao zerar estatísticas" }, { status: 500 });
+      }
+
+      const { error: updateError } = await supabase
+        .from("users")
+        .update({ total_segundos: 0 })
+        .eq("id", user_id);
+
+      if (updateError) throw updateError;
+
+      await registrarLog(
+        supabase,
+        admin.id,
+        "admin_reset_user",
+        `Estatísticas zeradas para ${alvo.username}`,
+        user_id
+      );
+
+      return NextResponse.json({ success: true, message: "Estatísticas zeradas" });
+    }
+
+    if (acao === "toggle_role") {
+      const { role } = body;
+      if (!ROLES_VALIDAS.includes(role)) {
+        return NextResponse.json({ error: "Cargo inválido" }, { status: 400 });
+      }
+
+      // Impede rebaixar/remover o último Admin Master
+      if (alvo.role === "admin" && role !== "admin") {
+        const totalAdmins = await contarAdmins(supabase);
+        if (totalAdmins <= 1) {
+          return NextResponse.json(
+            { error: "Não é possível alterar o último Admin Master" },
+            { status: 400 }
+          );
+        }
+      }
+
+      // Impede promover um admin para moderador se já for admin
+      if (alvo.role === "admin" && role === "admin") {
+        return NextResponse.json({ error: "Cargo inalterado" }, { status: 400 });
+      }
+
+      const { error: updateError } = await supabase
+        .from("users")
+        .update({ role, is_admin: role === "admin" })
+        .eq("id", user_id);
+
+      if (updateError) throw updateError;
+
+      await registrarLog(
+        supabase,
+        admin.id,
+        "admin_toggle_role",
+        `Cargo de ${alvo.username} alterado de ${alvo.role} para ${role}`,
+        user_id
+      );
+
+      return NextResponse.json({ success: true, role, message: "Cargo atualizado" });
+    }
+
+    return NextResponse.json({ error: "Ação inválida" }, { status: 400 });
+  } catch (error) {
+    console.error("[ADMIN/USERS] Erro ao atualizar usuário:", error);
+    return NextResponse.json({ error: "Erro interno ao atualizar usuário" }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  const { response, user: admin } = await requireAdmin();
+  if (response) return response;
+
+  const supabase = createServiceClient();
+
+  try {
+    const body = await req.json();
+    const { user_id } = body;
+
+    if (!user_id || typeof user_id !== "string") {
+      return NextResponse.json({ error: "Usuário inválido" }, { status: 400 });
+    }
+
+    if (user_id === admin.id) {
+      return NextResponse.json({ error: "Você não pode remover a si mesmo" }, { status: 403 });
+    }
+
+    const { data: alvo, error: alvoError } = await supabase
+      .from("users")
+      .select("id, username, role")
+      .eq("id", user_id)
+      .maybeSingle();
+
+    if (alvoError) throw alvoError;
+    if (!alvo) return NextResponse.json({ error: "Usuário não encontrado" }, { status: 404 });
+
+    if (alvo.role === "admin") {
+      const totalAdmins = await contarAdmins(supabase);
+      if (totalAdmins <= 1) {
+        return NextResponse.json(
+          { error: "Não é possível remover o último Admin Master" },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Remove os registros ligados ao usuário antes de apagar a conta
+    const limpezas = await Promise.all([
+      supabase.from("sessoes").delete().eq("user_id", user_id),
+      supabase.from("pagamentos").delete().eq("user_id", user_id),
+      supabase.from("penalidades").delete().eq("user_id", user_id),
+      supabase.from("logs").delete().eq("user_id", user_id),
+    ]);
+
+    const falhas = limpezas.map((r) => r.error).filter(Boolean);
+    if (falhas.length > 0) {
+      console.error("[ADMIN/USERS] Erro ao limpar dados do usuário:", falhas);
+      return NextResponse.json({ error: "Erro ao limpar dados do usuário" }, { status: 500 });
+    }
+
+    const { error: deleteError } = await supabase.from("users").delete().eq("id", user_id);
+    if (deleteError) throw deleteError;
+
+    await registrarLog(
+      supabase,
+      admin.id,
+      "admin_delete_user",
+      `Usuário ${alvo.username} removido`,
+      admin.id
+    );
+
+    return NextResponse.json({ success: true, message: "Usuário removido" });
+  } catch (error) {
+    console.error("[ADMIN/USERS] Erro ao remover usuário:", error);
+    return NextResponse.json({ error: "Erro interno ao remover usuário" }, { status: 500 });
+  }
+}
