@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
-import { getUserFromRequest, isAdminRole } from "@/lib/auth";
+import { getUserFromRequest, isManager } from "@/lib/auth";
 
 const PAGE_SIZE = 50;
 
 export async function GET(req: NextRequest) {
   const user = await getUserFromRequest();
-  if (!user || !isAdminRole(user)) {
-    return NextResponse.json({ error: "Apenas o Admin Master pode consultar a auditoria" }, { status: 403 });
+  if (!user || !isManager(user)) {
+    return NextResponse.json({ error: "Apenas administradores e co-admins podem consultar a auditoria" }, { status: 403 });
   }
 
   const params = new URL(req.url).searchParams;
