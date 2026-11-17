@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUserFromRequest, isManager } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase";
 import crypto from "crypto";
+import { registrarAuditoria } from "@/lib/audit";
 
 export async function POST(req: NextRequest) {
   const user = await getUserFromRequest();
@@ -20,34 +21,50 @@ export async function POST(req: NextRequest) {
 
     const agora = new Date().toISOString();
 
-    const { data: existing } = await supabase
+    const { data: alvo, error: alvoError } = await supabase.from("users").select("username").eq("id", user_id).maybeSingle();
+    if (alvoError) throw alvoError;
+    if (!alvo) return NextResponse.json({ error: "Usuário não encontrado" }, { status: 404 });
+
+    const valor = Number(valor_calculado || 0);
+    const horas = Number(horas_farmadas || 0);
+    if (!Number.isFinite(valor) || valor < 0 || !Number.isFinite(horas) || horas < 0) {
+      return NextResponse.json({ error: "Horas ou valor do pagamento inválidos" }, { status: 400 });
+    }
+
+    const { data: existing, error: existingError } = await supabase
       .from("pagamentos")
       .select("id")
       .eq("data", data)
       .eq("user_id", user_id)
       .maybeSingle();
 
+    if (existingError) throw existingError;
+
     if (existing) {
-      await supabase
+      const { error: updateError } = await supabase
         .from("pagamentos")
         .update({
           pago: true,
           pago_em: agora,
-          valor_calculado: valor_calculado || 0,
-          horas_farmadas: horas_farmadas || 0,
+          valor_calculado: valor,
+          horas_farmadas: horas,
         })
         .eq("id", existing.id);
+      if (updateError) throw updateError;
     } else {
-      await supabase.from("pagamentos").insert({
+      const { error: insertError } = await supabase.from("pagamentos").insert({
         id: crypto.randomUUID(),
         data,
         user_id,
-        horas_farmadas: horas_farmadas || 0,
-        valor_calculado: valor_calculado || 0,
+        horas_farmadas: horas,
+        valor_calculado: valor,
         pago: true,
         pago_em: agora,
       });
+      if (insertError) throw insertError;
     }
+
+    await registrarAuditoria(supabase, user, "admin:confirmar_pagamento", `Pagamento do dia ${data} confirmado: ${horas}h, R$ ${valor.toFixed(2)}.`, { id: user_id, username: alvo.username });
 
     return NextResponse.json({
       success: true,
@@ -58,3 +75,4 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Erro interno ao confirmar pagamento" }, { status: 500 });
   }
 }
+

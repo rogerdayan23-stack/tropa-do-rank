@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { getUserFromRequest, isAdminRole } from "@/lib/auth";
 import { STATUS_ATIVA, STATUS_PAUSADA, STATUS_ENCERRADA, construirAtualizacaoSessao, logContagemSessao, LIMITE_SESSAO_SEGUNDOS } from "@/lib/sessao";
+import { registrarAuditoria } from "@/lib/audit";
 
 export async function POST(req: NextRequest) {
   const user = await getUserFromRequest();
@@ -59,13 +60,8 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  await service.from("logs").insert({
-    user_id: user.id,
-    acao: "cron_contagem_horas",
-    detalhe: `${atualizadas} sessões atualizadas, ${expiradas} expiradas (limite ${LIMITE_SESSAO_SEGUNDOS}s)`,
-    admin_id: user.id,
-    criado_em: agora,
-  });
+  await registrarAuditoria(service, user, "admin:cron_contagem_horas", `${atualizadas} sessões atualizadas, ${expiradas} expiradas (limite ${LIMITE_SESSAO_SEGUNDOS}s).`);
 
   return NextResponse.json({ ok: true, atualizadas, expiradas });
 }
+

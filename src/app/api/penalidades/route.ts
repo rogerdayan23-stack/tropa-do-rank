@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUserFromRequest, isManager } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase";
 import crypto from "crypto";
+import { registrarAuditoria } from "@/lib/audit";
 
 export async function GET() {
   const user = await getUserFromRequest();
@@ -88,6 +89,14 @@ export async function POST(req: NextRequest) {
 
     if (insertError) throw insertError;
 
+    await registrarAuditoria(
+      supabase,
+      user,
+      "admin:criar_penalidade",
+      `Penalidade aplicada: R$ ${valorNum.toFixed(2)}. Motivo: ${motivo.trim()}.`,
+      { id: user_id, username: targetUser.username },
+    );
+
     return NextResponse.json({
       success: true,
       message: "Penalidade aplicada com sucesso!",
@@ -117,15 +126,27 @@ export async function DELETE(req: NextRequest) {
     const { id } = await req.json();
     if (!id) return NextResponse.json({ error: "ID obrigatório" }, { status: 400 });
 
-    const { data: existente } = await supabase
+    const { data: existente, error: consultaError } = await supabase
       .from("penalidades")
-      .select("id")
+      .select("id, user_id, motivo, valor")
       .eq("id", id)
-      .single();
+      .maybeSingle();
+
+    if (consultaError) throw consultaError;
 
     if (!existente) return NextResponse.json({ error: "Penalidade não encontrada" }, { status: 404 });
 
-    await supabase.from("penalidades").delete().eq("id", id);
+    const { data: alvo } = await supabase.from("users").select("username").eq("id", existente.user_id).maybeSingle();
+    const { error: deleteError } = await supabase.from("penalidades").delete().eq("id", id);
+    if (deleteError) throw deleteError;
+
+    await registrarAuditoria(
+      supabase,
+      user,
+      "admin:remover_penalidade",
+      `Penalidade ${id} removida: R$ ${Number(existente.valor).toFixed(2)}. Motivo: ${existente.motivo}.`,
+      { id: existente.user_id, username: alvo?.username || "Usuário removido" },
+    );
 
     return NextResponse.json({ success: true, message: "Penalidade removida com sucesso" });
   } catch (error: any) {
@@ -133,3 +154,4 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: "Erro interno ao remover penalidade" }, { status: 500 });
   }
 }
+

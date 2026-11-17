@@ -56,7 +56,7 @@ export default function AdminMasterMonitor() {
     carregandoRef.current = true;
     try {
       const [resUsers, resSessoes] = await Promise.all([
-        fetch("/api/admin/users", { cache: "no-store" }),
+        fetch("/api/admin/monitoramento/users", { cache: "no-store" }),
         fetch("/api/admin/sessoes", { cache: "no-store" }),
       ]);
       const [dadosUsers, dadosSessoes] = await Promise.all([resUsers.json(), resSessoes.json()]);
@@ -87,8 +87,8 @@ export default function AdminMasterMonitor() {
       try {
         const resposta = await fetch("/api/auth/me", { cache: "no-store" });
         const dados = await resposta.json();
-        if (!resposta.ok || dados.user?.role !== "admin") {
-          toast.error("Apenas o Admin Master pode acessar o monitoramento.");
+        if (!resposta.ok || !["admin", "moderador"].includes(dados.user?.role)) {
+          toast.error("Apenas administradores e co-admins podem acessar o monitoramento.");
           router.replace("/dashboard");
           return;
         }

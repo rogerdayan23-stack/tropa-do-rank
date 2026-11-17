@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserFromRequest, isAdminRole } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase";
+import { registrarAuditoria } from "@/lib/audit";
 
 const USER_COLUMNS = "id, username, apelido, role, is_admin, avatar_url, criado_em, total_segundos";
 const ROLES_VALIDAS = ["user", "moderador", "admin"];
@@ -22,22 +23,6 @@ async function contarAdmins(supabase: ReturnType<typeof createServiceClient>) {
     .select("id", { count: "exact", head: true })
     .eq("role", "admin");
   return count || 0;
-}
-
-async function registrarLog(
-  supabase: ReturnType<typeof createServiceClient>,
-  adminId: string,
-  acao: string,
-  detalhe: string,
-  alvoId: string
-) {
-  await supabase.from("logs").insert({
-    user_id: alvoId,
-    admin_id: adminId,
-    acao,
-    detalhe,
-    criado_em: new Date().toISOString(),
-  });
 }
 
 export async function GET() {
@@ -128,7 +113,7 @@ export async function PATCH(req: NextRequest) {
       const ajusteSemanal = operation === "add" ? segundosAjuste : -segundosAjuste;
       const marcadorSemanal = `${ajusteSemanal > 0 ? "+" : ""}${ajusteSemanal}s`;
       const detalhe = `${alvo.username}: ${sinal}${hours}h${String(minutes).padStart(2, "0")}m (${totalAnterior}s → ${totalNovo}s) [ajuste-semanal:${marcadorSemanal}]`;
-      await registrarLog(supabase, admin.id, "admin_adjust_user_hours", detalhe, user_id);
+      await registrarAuditoria(supabase, admin, "admin_adjust_user_hours", detalhe, { id: user_id, username: alvo.username });
 
       return NextResponse.json({
         success: true,
@@ -158,12 +143,12 @@ export async function PATCH(req: NextRequest) {
 
       if (updateError) throw updateError;
 
-      await registrarLog(
+      await registrarAuditoria(
         supabase,
-        admin.id,
+        admin,
         "admin_reset_user",
-        `Estatísticas zeradas para ${alvo.username}`,
-        user_id
+        `Estatísticas e horas zeradas para ${alvo.username}; total anterior: ${Number(alvo.total_segundos || 0)}s.`,
+        { id: user_id, username: alvo.username },
       );
 
       return NextResponse.json({ success: true, message: "Estatísticas zeradas" });
@@ -198,13 +183,7 @@ export async function PATCH(req: NextRequest) {
 
       if (updateError) throw updateError;
 
-      await registrarLog(
-        supabase,
-        admin.id,
-        "admin_toggle_role",
-        `Cargo de ${alvo.username} alterado de ${alvo.role} para ${role}`,
-        user_id
-      );
+      await registrarAuditoria(supabase, admin, "admin_toggle_role", `Cargo alterado de ${alvo.role} para ${role}.`, { id: user_id, username: alvo.username });
 
       return NextResponse.json({ success: true, role, message: "Cargo atualizado" });
     }
@@ -258,7 +237,6 @@ export async function DELETE(req: NextRequest) {
       supabase.from("sessoes").delete().eq("user_id", user_id),
       supabase.from("pagamentos").delete().eq("user_id", user_id),
       supabase.from("penalidades").delete().eq("user_id", user_id),
-      supabase.from("logs").delete().eq("user_id", user_id),
     ]);
 
     const falhas = limpezas.map((r) => r.error).filter(Boolean);
@@ -270,13 +248,8 @@ export async function DELETE(req: NextRequest) {
     const { error: deleteError } = await supabase.from("users").delete().eq("id", user_id);
     if (deleteError) throw deleteError;
 
-    await registrarLog(
-      supabase,
-      admin.id,
-      "admin_delete_user",
-      `Usuário ${alvo.username} removido`,
-      admin.id
-    );
+    // Não apagar os logs do usuário: a auditoria precisa sobreviver à remoção.
+    await registrarAuditoria(supabase, admin, "admin_delete_user", `Usuário ${alvo.username} removido permanentemente (id ${user_id}, cargo ${alvo.role}).`);
 
     return NextResponse.json({ success: true, message: "Usuário removido" });
   } catch (error) {
