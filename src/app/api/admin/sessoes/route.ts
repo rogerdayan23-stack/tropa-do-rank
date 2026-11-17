@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
-import { getUserFromRequest, isAdminRole } from "@/lib/auth";
+import { getUserFromRequest, isManager } from "@/lib/auth";
+import { registrarAuditoria } from "@/lib/audit";
 import { STATUS_ATIVA, STATUS_PAUSADA, STATUS_ENCERRADA, calcularDuracaoSessao, construirAtualizacaoSessao, LIMITE_SESSAO_SEGUNDOS, logContagemSessao, type SessaoRow } from "@/lib/sessao";
 import { expirarSessoesVencidas } from "@/lib/sessao-server";
 
 async function requireAdmin() {
   const user = await getUserFromRequest();
-  if (!user || !isAdminRole(user)) return { response: NextResponse.json({ error: "Acesso negado" }, { status: 403 }), user: null };
+  if (!user || !isManager(user)) return { response: NextResponse.json({ error: "Acesso negado" }, { status: 403 }), user: null };
   return { response: null, user };
 }
 
@@ -82,7 +83,8 @@ export async function POST(req: NextRequest) {
       .eq("status", statusEsperado);
     if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
 
-    await service.from("logs").insert({ user_id: sessao.user_id, acao: `admin:${acao}_sessao`, detalhe: sessao_id, admin_id: user!.id, criado_em: agora });
+    const { data: alvo } = await service.from("users").select("username").eq("id", sessao.user_id).maybeSingle();
+    await registrarAuditoria(service, user!, `admin:${acao}_sessao`, `Sessão ${sessao_id} ${acao === "pausar" ? "pausada" : "retomada"}.`, { id: sessao.user_id, username: alvo?.username || null });
     return NextResponse.json({ ok: true });
   }
 
@@ -95,7 +97,9 @@ export async function POST(req: NextRequest) {
       const { error: e } = await supabase.from("sessoes").update({ status: STATUS_PAUSADA, segundos_acumulados: segundosAcumulados, ultima_atividade: agora }).eq("id", s.id);
       if (!e) { count++; logContagemSessao(s.id, segundosAcumulados, "pausar-todos-admin"); }
     }
-    await service.from("logs").insert({ user_id: user!.id, acao: "admin:pausar_todos", detalhe: `${count} sessões pausadas`, admin_id: user!.id, criado_em: agora });
+    const ids = (ativas || []).map((sessao) => sessao.user_id).filter(Boolean);
+    const { data: alvos } = ids.length ? await service.from("users").select("username").in("id", ids) : { data: [] };
+    await registrarAuditoria(service, user!, "admin:pausar_todos", `${count} sessões pausadas. Jogadores: ${(alvos || []).map((alvo) => alvo.username).join(", ") || "nenhum"}.`);
     return NextResponse.json({ ok: true, count });
   }
 
@@ -107,7 +111,9 @@ export async function POST(req: NextRequest) {
       const { error: e } = await supabase.from("sessoes").update({ status: STATUS_ATIVA, inicio: agora, ultima_atividade: agora }).eq("id", s.id);
       if (!e) { count++; logContagemSessao(s.id, s.segundos_acumulados || 0, "despausar-todos-admin"); }
     }
-    await service.from("logs").insert({ user_id: user!.id, acao: "admin:despausar_todos", detalhe: `${count} sessões retomadas`, admin_id: user!.id, criado_em: agora });
+    const ids = (pausadas || []).map((sessao) => sessao.user_id).filter(Boolean);
+    const { data: alvos } = ids.length ? await service.from("users").select("username").in("id", ids) : { data: [] };
+    await registrarAuditoria(service, user!, "admin:despausar_todos", `${count} sessões retomadas. Jogadores: ${(alvos || []).map((alvo) => alvo.username).join(", ") || "nenhum"}.`);
     return NextResponse.json({ ok: true, count });
   }
 
@@ -130,7 +136,7 @@ export async function POST(req: NextRequest) {
         }
       }
     }
-    await service.from("logs").insert({ user_id: user!.id, acao: "admin:contagem_horas", detalhe: `${atualizadas} atualizadas, ${expiradas} expiradas (limite ${LIMITE_SESSAO_SEGUNDOS}s)`, admin_id: user!.id, criado_em: agora });
+    await registrarAuditoria(service, user!, "admin:contagem_horas", `${atualizadas} sessões sincronizadas; ${expiradas} expiradas automaticamente; limite ${LIMITE_SESSAO_SEGUNDOS}s.`);
     return NextResponse.json({ ok: true, atualizadas, expiradas });
   }
 
@@ -163,24 +169,34 @@ export async function POST(req: NextRequest) {
       count++;
     }
 
-    await service.from("logs").insert({ user_id: user!.id, acao: sessao_id ? "admin:encerrar_sessao" : "admin:encerrar_todas", detalhe: `${count} sessões encerradas`, admin_id: user!.id, criado_em: agora });
+    const alvos = Array.from(new Set((sessoesParaEncerrar || []).map((sessao) => sessao.user_id).filter(Boolean)));
+    const { data: usuariosAfetados } = alvos.length ? await service.from("users").select("username").in("id", alvos) : { data: [] };
+    await registrarAuditoria(service, user!, sessao_id ? "admin:encerrar_sessao" : "admin:encerrar_todas", `${count} sessões encerradas. Jogadores: ${(usuariosAfetados || []).map((alvo) => alvo.username).join(", ") || "nenhum"}.`);
     return NextResponse.json({ ok: true, count });
   } else if (acao === "ajustar") {
+    if (!sessao_id || !Number.isInteger(minutos) || minutos === 0) {
+      return NextResponse.json({ error: "Informe uma sessão e uma quantidade válida de minutos" }, { status: 400 });
+    }
     const ajuste = (minutos || 0) * 60;
-    const { data: s } = await supabase.from("sessoes").select("segundos_acumulados").eq("id", sessao_id).single();
-    const atual = ((s?.segundos_acumulados as number) || 0);
-    await supabase.from("sessoes").update({ segundos_acumulados: atual + ajuste }).eq("id", sessao_id);
+    const { data: s, error: sessaoError } = await supabase.from("sessoes").select("user_id, segundos_acumulados").eq("id", sessao_id).maybeSingle();
+    if (sessaoError || !s) return NextResponse.json({ error: "Sessão não encontrada" }, { status: 404 });
+    const atual = Math.max(0, Number(s.segundos_acumulados) || 0);
+    if (atual + ajuste < 0) return NextResponse.json({ error: "O ajuste não pode deixar a sessão negativa" }, { status: 400 });
+    const { error: ajusteError } = await supabase.from("sessoes").update({ segundos_acumulados: atual + ajuste }).eq("id", sessao_id);
+    if (ajusteError) return NextResponse.json({ error: ajusteError.message }, { status: 500 });
+    const { data: alvo } = await service.from("users").select("username").eq("id", s.user_id).maybeSingle();
+    await registrarAuditoria(service, user!, "admin:ajustar", `Sessão ${sessao_id}: ${minutos > 0 ? "+" : ""}${minutos} min (${atual}s → ${atual + ajuste}s).`, { id: s.user_id, username: alvo?.username || null });
   } else if (acao === "cancelar") {
-    await supabase.from("sessoes").delete().eq("id", sessao_id);
+    const { data: sessao, error: sessaoError } = await supabase.from("sessoes").select("user_id, status, segundos_acumulados").eq("id", sessao_id).maybeSingle();
+    if (sessaoError || !sessao) return NextResponse.json({ error: "Sessão não encontrada" }, { status: 404 });
+    const { error: deleteError } = await supabase.from("sessoes").delete().eq("id", sessao_id);
+    if (deleteError) return NextResponse.json({ error: deleteError.message }, { status: 500 });
+    const { data: alvo } = await service.from("users").select("username").eq("id", sessao.user_id).maybeSingle();
+    await registrarAuditoria(service, user!, "admin:cancelar", `Sessão ${sessao_id} cancelada (${sessao.status}, ${sessao.segundos_acumulados || 0}s acumulados).`, { id: sessao.user_id, username: alvo?.username || null });
+    return NextResponse.json({ ok: true });
+  } else {
+    return NextResponse.json({ error: "Ação inválida" }, { status: 400 });
   }
-
-  await service.from("logs").insert({
-    user_id: user!.id,
-    acao: `admin:${acao}`,
-    detalhe: sessao_id,
-    admin_id: user!.id,
-    criado_em: agora,
-  });
 
   return NextResponse.json({ ok: true });
 }
