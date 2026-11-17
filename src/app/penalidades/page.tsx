@@ -199,7 +199,7 @@ export default function PenalidadesPage() {
         <div className="flex items-center justify-between">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <AlertTriangle size={22} className="text-orange-400" />
+            <AlertTriangle size={22} className="text-violet-200" />
             <h1 className="text-2xl font-bold tracking-tight">Penalidades</h1>
           </div>
           <p className="text-muted-foreground text-sm">
@@ -221,7 +221,7 @@ export default function PenalidadesPage() {
       {resumoPorJogador.length > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
           {resumoPorJogador.map((j) => (
-            <Card key={j.id} className="border-orange-500/20">
+          <Card key={j.id} className="border-rose-400/20">
               <CardContent className="pt-4 pb-4">
                 <div className="flex items-center gap-2 mb-2">
                   <Avatar url={j.avatar} nome={j.nome} size={7} />
@@ -336,7 +336,7 @@ export default function PenalidadesPage() {
         <DialogContent className="bg-[#111] border-border/60 max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <AlertTriangle size={18} className="text-orange-400" />
+              <AlertTriangle size={18} className="text-violet-200" />
               Nova Penalidade
             </DialogTitle>
           </DialogHeader>
@@ -398,7 +398,7 @@ export default function PenalidadesPage() {
             <Button
               onClick={salvarPenalidade}
               disabled={salvando}
-              className="bg-orange-500 hover:bg-orange-600 text-white font-semibold"
+              className="bg-primary text-primary-foreground hover:bg-primary/90 font-semibold"
             >
               {salvando ? <Loader2 size={16} className="animate-spin mr-2" /> : null}
               Aplicar Penalidade

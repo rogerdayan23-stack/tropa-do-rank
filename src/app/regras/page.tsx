@@ -175,7 +175,7 @@ export default function RegrasPage() {
           </CardHeader>
           <CardContent>
             <div className="flex items-center gap-2 text-sm">
-              <Check size={16} className="text-green-500" />
+              <Check size={16} className="text-primary" />
               <span>Você já aceitou as regras.</span>
             </div>
           </CardContent>

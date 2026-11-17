@@ -72,7 +72,7 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: "Usuário inválido" }, { status: 400 });
     }
 
-    if (user_id === admin.id) {
+    if (user_id === admin.id && acao !== "adjust_hours") {
       return NextResponse.json(
         { error: "Você não pode executar esta ação na sua própria conta" },
         { status: 403 }
@@ -87,6 +87,53 @@ export async function PATCH(req: NextRequest) {
 
     if (alvoError) throw alvoError;
     if (!alvo) return NextResponse.json({ error: "Usuário não encontrado" }, { status: 404 });
+
+    if (acao === "adjust_hours") {
+      const { operation, hours, minutes } = body;
+      if (operation !== "add" && operation !== "subtract") {
+        return NextResponse.json({ error: "Tipo de ajuste inválido" }, { status: 400 });
+      }
+      if (
+        !Number.isInteger(hours) || hours < 0 || hours > 100000 ||
+        !Number.isInteger(minutes) || minutes < 0 || minutes > 59
+      ) {
+        return NextResponse.json({ error: "Informe uma duração válida em horas e minutos" }, { status: 400 });
+      }
+
+      const segundosAjuste = hours * 3600 + minutes * 60;
+      if (!Number.isSafeInteger(segundosAjuste) || segundosAjuste <= 0) {
+        return NextResponse.json({ error: "O ajuste precisa ser maior que zero" }, { status: 400 });
+      }
+
+      const totalAnterior = Number(alvo.total_segundos || 0);
+      const totalNovo = operation === "add"
+        ? totalAnterior + segundosAjuste
+        : totalAnterior - segundosAjuste;
+
+      if (totalNovo < 0) {
+        return NextResponse.json({ error: "O desconto não pode deixar o total de horas abaixo de zero" }, { status: 400 });
+      }
+      if (!Number.isSafeInteger(totalNovo)) {
+        return NextResponse.json({ error: "O total informado é muito alto" }, { status: 400 });
+      }
+
+      const { error: updateError } = await supabase
+        .from("users")
+        .update({ total_segundos: totalNovo })
+        .eq("id", user_id);
+
+      if (updateError) throw updateError;
+
+      const sinal = operation === "add" ? "+" : "−";
+      const detalhe = `${alvo.username}: ${sinal}${hours}h${String(minutes).padStart(2, "0")}m (${totalAnterior}s → ${totalNovo}s)`;
+      await registrarLog(supabase, admin.id, "admin_adjust_user_hours", detalhe, user_id);
+
+      return NextResponse.json({
+        success: true,
+        total_segundos: totalNovo,
+        message: `Horas de ${alvo.username} ajustadas com sucesso`,
+      });
+    }
 
     if (acao === "reset") {
       // Zera horas e saldos: apaga sessões, pagamentos e penalidades do jogador

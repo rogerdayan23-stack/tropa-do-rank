@@ -1,525 +1,286 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { Activity, Clock, Crown, Loader2, Pause, Play, RefreshCw, Shield, Square, Users } from "lucide-react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
-import {
-  Shield,
-  ShieldCheck,
-  Crown,
-  Loader2,
-  Clock,
-  Pause,
-  Play,
-  Square,
-  Activity,
-  Users,
-} from "lucide-react";
-import { toast as notify } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-interface SessaoAtiva {
-  id: string;
-  user_id: string;
-  apelido: string;
-  status: "ativa" | "pausada" | "encerrada";
-  inicio: string | null;
-  segundos_acumulados: number;
-  ultima_atividade: string | null;
-}
-
-interface UsuarioAtivo {
+interface UsuarioMonitorado {
   id: string;
   username: string;
- apelido: string;
+  apelido: string;
   role: string;
-  is_admin: boolean | null;
   avatar_url: string | null;
-  criado_em: string;
   total_segundos: number;
+}
+
+interface SessaoMonitorada {
+  id: string;
+  user_id: string;
+  inicio: string | null;
+  status: "ativa" | "pausada";
+  segundos_acumulados: number;
+  duracao: number;
+  ultima_atividade: string | null;
+  sincronizadaEm: number;
+}
+
+type FiltroStatus = "todos" | "ativa" | "pausada" | "inativa";
+
+function formatHMS(segundos: number) {
+  const total = Math.max(0, Math.floor(Number(segundos) || 0));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  return [h, m, s].map((v) => v.toString().padStart(2, "0")).join(":");
 }
 
 export default function AdminMasterMonitor() {
   const router = useRouter();
-  const [users, setUsers] = useState<UsuarioAtivo[]>([]);
-  const [sessoes, setSessoes] = useState<SessaoAtiva[]>([]);
+  const [users, setUsers] = useState<UsuarioMonitorado[]>([]);
+  const [sessoes, setSessoes] = useState<SessaoMonitorada[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filtroStatus, setFiltroStatus] = useState<string | null>(null);
-  const [showPausarAll, setShowPausarAll] = useState(false);
-  const [showPararAll, setShowPararAll] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+  const [atualizadoEm, setAtualizadoEm] = useState<string | null>(null);
+  const [filtro, setFiltro] = useState<FiltroStatus>("todos");
+  const [, atualizarRelogio] = useState(0);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const carregandoRef = useRef(false);
 
-  const toast = ({ title, description, variant }: { title?: string; description?: string; variant?: string }) => {
-    const message = description || title || "";
-    if (variant === "destructive") notify.error(message);
-    else notify.success(message);
-  };
+  const carregarDados = useCallback(async () => {
+    if (carregandoRef.current) return;
+    carregandoRef.current = true;
+    try {
+      const [resUsers, resSessoes] = await Promise.all([
+        fetch("/api/admin/users", { cache: "no-store" }),
+        fetch("/api/admin/sessoes", { cache: "no-store" }),
+      ]);
+      const [dadosUsers, dadosSessoes] = await Promise.all([resUsers.json(), resSessoes.json()]);
+      if (!resUsers.ok) throw new Error(dadosUsers.error || "Não foi possível carregar os jogadores.");
+      if (!resSessoes.ok) throw new Error(dadosSessoes.error || "Não foi possível carregar as sessões ao vivo.");
 
-  // Interval ref for real-time updates
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+      setUsers(dadosUsers.users || []);
+      setSessoes((dadosSessoes.sessoes || []).map((sessao: Omit<SessaoMonitorada, "sincronizadaEm">) => ({
+        ...sessao,
+        duracao: Math.max(0, Number(sessao.duracao ?? sessao.segundos_acumulados) || 0),
+        sincronizadaEm: performance.now(),
+      })));
+      setAtualizadoEm(new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
+      setErro(null);
+    } catch (error) {
+      const mensagem = error instanceof Error ? error.message : "Erro ao atualizar o monitoramento.";
+      setErro(mensagem);
+    } finally {
+      setLoading(false);
+      carregandoRef.current = false;
+    }
+  }, []);
 
   useEffect(() => {
-    // Verificar autorização
-    async function verificarECarregar() {
-      try {
-        const resMe = await fetch("/api/auth/me");
-        const me = await resMe.json();
+    let cancelado = false;
 
-        if (me.user?.role !== "admin") {
-          toast({
-            title: "Acesso negado",
-            description: "Apenas Admin Master pode acessar esta página",
-            variant: "destructive",
-          });
-          router.replace("/admin/usuarios");
+    async function iniciarMonitoramento() {
+      try {
+        const resposta = await fetch("/api/auth/me", { cache: "no-store" });
+        const dados = await resposta.json();
+        if (!resposta.ok || dados.user?.role !== "admin") {
+          toast.error("Apenas o Admin Master pode acessar o monitoramento.");
+          router.replace("/dashboard");
           return;
         }
+        if (cancelado) return;
 
-        setLoading(false);
         await carregarDados();
-
-        // Iniciar intervalo de atualização em tempo real (a cada 3 segundos)
-        intervalRef.current = setInterval(async () => {
-          await carregarSessoesAtivas();
-        }, 3000);
-
-        return () => {
-          if (intervalRef.current) {
-            clearInterval(intervalRef.current);
-            intervalRef.current = null;
-          }
-        };
+        if (cancelado) return;
+        intervalRef.current = setInterval(() => void carregarDados(), 3000);
+        tickRef.current = setInterval(() => atualizarRelogio((valor) => valor + 1), 1000);
       } catch {
         router.replace("/dashboard");
       }
     }
 
-    verificarECarregar();
-  }, [router]);
+    void iniciarMonitoramento();
+    return () => {
+      cancelado = true;
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      if (tickRef.current) clearInterval(tickRef.current);
+    };
+  }, [carregarDados, router]);
 
-  async function carregarDados() {
+  const sessaoPorUsuario = useMemo(() => {
+    const mapa = new Map<string, SessaoMonitorada>();
+    for (const sessao of sessoes) {
+      if (!mapa.has(sessao.user_id)) mapa.set(sessao.user_id, sessao);
+    }
+    return mapa;
+  }, [sessoes]);
+
+  const jogadores = useMemo(() => users.map((usuario) => ({
+    usuario,
+    sessao: sessaoPorUsuario.get(usuario.id) || null,
+    status: sessaoPorUsuario.get(usuario.id)?.status || "inativa",
+  })), [users, sessaoPorUsuario]);
+
+  const jogadoresFiltrados = jogadores.filter((jogador) => filtro === "todos" || jogador.status === filtro);
+  const ativas = sessoes.filter((sessao) => sessao.status === "ativa").length;
+  const pausadas = sessoes.filter((sessao) => sessao.status === "pausada").length;
+  const inativas = Math.max(0, users.length - ativas - pausadas);
+
+  function duracaoAtual(sessao: SessaoMonitorada) {
+    const extra = sessao.status === "ativa" ? Math.max(0, Math.floor((performance.now() - sessao.sincronizadaEm) / 1000)) : 0;
+    return Math.max(0, sessao.duracao + extra);
+  }
+
+  async function executarAcao(acao: string, sessaoId?: string) {
     try {
-      // Carregar usuários
-      const resU = await fetch("/api/admin/users");
-      const dadosU = await resU.json();
-      if (resU.ok) {
-        setUsers(dadosU.users || []);
-      }
-
-      // Carregar sessões ativas e pausadas
-      await carregarSessoesAtivas();
-    } catch (err) {
-      console.error("Erro ao carregar dados:", err);
-      toast({
-        title: "Erro",
-        description: "Erro ao carregar dados do admin master",
-        variant: "destructive",
-      });
-    }
-  }
-
-  async function carregarSessoesAtivas() {
-    try {
-      const res = await fetch("/api/admin/sessoes");
-      const data = await res.json();
-      if (res.ok) {
-        setSessoes(data.sessoes || []);
-      }
-    } catch (err) {
-      console.error("Erro ao carregar sessões:", err);
-    }
-  }
-
-  function formatHMS(segundos: number) {
-    const h = Math.floor(segundos / 3600);
-    const m = Math.floor((segundos % 3600) / 60);
-    const s = Math.floor(segundos % 60);
-    return [h, m, s].map((v) => v.toString().padStart(2, "0")).join(":");
-  }
-
-  function getStatusBadgeClass(status: string) {
-    switch (status) {
-      case "ativa":
-        return "border-green-500/30 bg-green-500/10 text-green-300";
-      case "pausada":
-        return "border-yellow-500/30 bg-yellow-500/10 text-yellow-300";
-      case "encerrada":
-        return "border-red-500/30 bg-red-500/10 text-red-300";
-      default:
-        return "border-gray-500/30 bg-gray-500/10 text-gray-300";
-    }
-  }
-
-  function getStatusIcon(status: string) {
-    switch (status) {
-      case "ativa":
-        return <Play size={12} className="text-green-400" />;
-      case "pausada":
-        return <Pause size={12} className="text-yellow-400" />;
-      case "encerrada":
-        return <Square size={12} className="text-red-400" />;
-      default:
-        return <Loader2 size={12} className="text-gray-400 animate-spin" />;
-    }
-  }
-
-  // Funções de ação em lote
-  async function pausarTodos() {
-    setShowPausarAll(true);
-  }
-
-  async function confirmarPausarTodos() {
-    try {
-      const res = await fetch("/api/admin/sessoes", {
+      const resposta = await fetch("/api/admin/sessoes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ acao: "pausar_todos" }),
+        body: JSON.stringify({ acao, ...(sessaoId ? { sessao_id: sessaoId } : {}) }),
       });
-      const data = await res.json();
-      if (res.ok) {
-        toast({
-          title: "Sucesso",
-          description: `${data.count || 0} sessões pausadas`,
-        });
-        await carregarSessoesAtivas();
-      } else {
-        toast({
-          title: "Erro",
-          description: data.error || "Erro ao pausar sessões",
-          variant: "destructive",
-        });
-      }
-    } catch (err) {
-      toast({
-        title: "Erro",
-        description: "Erro de conexão",
-        variant: "destructive",
-      });
-    } finally {
-      setShowPausarAll(false);
+      const dados = await resposta.json();
+      if (!resposta.ok) throw new Error(dados.error || "Não foi possível atualizar a sessão.");
+      toast.success(acao === "pausar" ? "Sessão pausada." : acao === "retomar" ? "Sessão retomada." : "Sessões atualizadas.");
+      await carregarDados();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Erro ao atualizar a sessão.");
     }
   }
 
-  async function pararTodos() {
-    setShowPararAll(true);
+  function confirmarAcaoEmLote(acao: "pausar_todos" | "despausar_todos" | "encerrar") {
+    const mensagem = acao === "pausar_todos"
+      ? "Pausar todas as sessões ativas?"
+      : acao === "despausar_todos"
+        ? "Retomar todas as sessões pausadas?"
+        : "Encerrar todas as sessões abertas? Esta ação não pode ser desfeita.";
+    if (window.confirm(mensagem)) void executarAcao(acao);
   }
 
-  async function confirmarPararTodos() {
-    try {
-      const res = await fetch("/api/admin/sessoes", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ acao: "encerrar" }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        toast({
-          title: "Sucesso",
-          description: "Todas as sessões foram encerradas",
-        });
-        await carregarSessoesAtivas();
-      } else {
-        toast({
-          title: "Erro",
-          description: data.error || "Erro ao encerrar sessões",
-          variant: "destructive",
-        });
-      }
-    } catch (err) {
-      toast({
-        title: "Erro",
-        description: "Erro de conexão",
-        variant: "destructive",
-      });
-    } finally {
-      setShowPararAll(false);
-    }
+  function classeStatus(status: string) {
+    if (status === "ativa") return "border-violet-300/30 bg-violet-300/10 text-violet-100";
+    if (status === "pausada") return "border-cyan-300/30 bg-cyan-300/10 text-cyan-100";
+    return "border-border bg-secondary/70 text-muted-foreground";
   }
 
-  // Funções de pausa/retomar individual
-  async function pausarSessao(id: string) {
-    try {
-      const res = await fetch("/api/admin/sessoes", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ acao: "pausar", sessao_id: id }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        toast({
-          title: "Sucesso",
-          description: "Sessão pausada",
-        });
-        await carregarSessoesAtivas();
-      } else {
-        toast({
-          title: "Erro",
-          description: data.error || "Erro ao pausar sessão",
-          variant: "destructive",
-        });
-      }
-    } catch (err) {
-      toast({
-        title: "Erro",
-        description: "Erro de conexão",
-        variant: "destructive",
-      });
-    }
-  }
-
-  async function retomarSessao(id: string) {
-    try {
-      const res = await fetch("/api/admin/sessoes", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ acao: "retomar", sessao_id: id }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        toast({
-          title: "Sucesso",
-          description: "Sessão retomada",
-        });
-        await carregarSessoesAtivas();
-      } else {
-        toast({
-          title: "Erro",
-          description: data.error || "Erro ao retomar sessão",
-          variant: "destructive",
-        });
-      }
-    } catch (err) {
-      toast({
-        title: "Erro",
-        description: "Erro de conexão",
-        variant: "destructive",
-      });
-    }
-  }
-
-  async function pararSessao(id: string) {
-    if (!window.confirm("Tem certeza que deseja encerrar esta sessão?")) return;
-    try {
-      const res = await fetch("/api/admin/sessoes", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ acao: "encerrar", sessao_id: id }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        toast({
-          title: "Sucesso",
-          description: "Sessão encerrada",
-        });
-        await carregarSessoesAtivas();
-      } else {
-        toast({
-          title: "Erro",
-          description: data.error || "Erro ao encerrar sessão",
-          variant: "destructive",
-        });
-      }
-    } catch (err) {
-      toast({
-        title: "Erro",
-        description: "Erro de conexão",
-        variant: "destructive",
-      });
-    }
-  }
-
-  if (loading) {
-    return (
-      <div className="h-96 flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
+  function textoStatus(status: string) {
+    return status === "ativa" ? "Ativa agora" : status === "pausada" ? "Pausada" : "Inativa";
   }
 
   return (
     <div className="space-y-6">
-      {/* Cabeçalho */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-yellow-400/30 bg-yellow-400/10">
-            <Crown size={24} className="text-yellow-400" />
+      <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="flex min-w-0 items-center gap-3 pl-12 sm:pl-0">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-violet-300/30 bg-violet-300/10">
+            <Crown size={23} className="text-violet-100" />
           </div>
+          <div className="min-w-0">
+            <h1 className="text-2xl font-black tracking-tight sm:text-3xl">Monitoramento ao vivo</h1>
+            <p className="text-sm text-muted-foreground">Status e tempo de cada jogador, atualizados automaticamente.</p>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 pl-12 sm:pl-0">
+          <Badge variant="outline" className="gap-1.5 px-3 py-1"><Users size={13} /> {users.length} jogadores</Badge>
+          <Badge variant="outline" className="gap-1.5 border-violet-300/30 px-3 py-1 text-violet-100"><Activity size={13} /> {ativas} ativos</Badge>
+          <Button variant="outline" size="sm" onClick={() => void carregarDados()} disabled={loading} className="gap-2">
+            <RefreshCw size={14} className={loading ? "animate-spin" : ""} /> Atualizar
+          </Button>
+        </div>
+      </header>
+
+      {erro && (
+        <div role="alert" className="flex flex-col gap-3 rounded-xl border border-red-400/30 bg-red-400/10 p-4 text-sm text-red-100 sm:flex-row sm:items-center sm:justify-between">
+          <span>Falha ao atualizar os dados: {erro}. A lista pode estar desatualizada.</span>
+          <Button size="sm" variant="outline" onClick={() => void carregarDados()} className="shrink-0">Tentar novamente</Button>
+        </div>
+      )}
+
+      <div className="grid grid-cols-3 gap-3">
+        <Card><CardContent className="p-4 sm:p-5"><p className="text-xs text-muted-foreground">Ativos</p><p className="mt-1 text-2xl font-bold text-violet-100">{ativas}</p></CardContent></Card>
+        <Card><CardContent className="p-4 sm:p-5"><p className="text-xs text-muted-foreground">Pausados</p><p className="mt-1 text-2xl font-bold text-cyan-100">{pausadas}</p></CardContent></Card>
+        <Card><CardContent className="p-4 sm:p-5"><p className="text-xs text-muted-foreground">Inativos</p><p className="mt-1 text-2xl font-bold text-muted-foreground">{inativas}</p></CardContent></Card>
+      </div>
+
+      <Card>
+        <CardHeader className="gap-4 border-b border-border/70 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-3xl font-black tracking-tight">ADMIN MASTER - MONITORAMENTO</h1>
-            <p className="text-sm text-muted-foreground">
-              Visão em tempo real de todos os jogadores ativos e controle de sessões
-            </p>
+            <CardTitle className="flex items-center gap-2"><Users size={18} className="text-primary" /> Jogadores</CardTitle>
+            <p className="mt-1 text-sm text-muted-foreground">Cada pessoa aparece aqui, mesmo quando não iniciou uma sessão.</p>
           </div>
-        </div>
+          <p className="text-xs text-muted-foreground">{atualizadoEm ? `Sincronizado às ${atualizadoEm}` : "Sincronizando…"} · a cada 3 s</p>
+        </CardHeader>
+        <CardContent className="space-y-4 p-4 sm:p-5">
+          <div className="flex flex-wrap gap-2">
+            {(["todos", "ativa", "pausada", "inativa"] as FiltroStatus[]).map((opcao) => {
+              const rotulos: Record<FiltroStatus, string> = { todos: "Todos", ativa: "Ativos", pausada: "Pausados", inativa: "Inativos" };
+              return <Button key={opcao} size="sm" variant={filtro === opcao ? "default" : "outline"} onClick={() => setFiltro(opcao)}>{rotulos[opcao]}</Button>;
+            })}
+          </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="outline" className="border-border/60 gap-1.5 px-3 py-1">
-            <Users size={12} /> {users.length} usuários cadastrados
-          </Badge>
-          <Badge variant="outline" className="border-yellow-400/40 gap-1.5 px-3 py-1 text-yellow-300">
-            <Crown size={12} /> Uptime
-          </Badge>
-        </div>
-      </div>
-
-      {/* Controles em lote */}
-      <div className="grid md:grid-cols-3 gap-4">
-        <Card>
-          <CardHeader className="flex items-center gap-2">
-            <Loader2 size={18} className="text-primary" />
-            <CardTitle>Sessões Ativas</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {sessoes.length === 0 ? (
-              <p className="text-muted-foreground text-sm">Nenhuma sessão ativa no momento</p>
-            ) : (
-              <div className="space-y-3">
-                {sessoes.map((s) => {
-                  const estiloStatus = getStatusBadgeClass(s.status);
-                  const iconeStatus = getStatusIcon(s.status);
-                  const acumulado = s.segundos_acumulados || 0;
-                  const extra = s.status === "ativa" && s.inicio ? Math.floor((Date.now() - new Date(s.inicio).getTime()) / 1000) : 0;
-                  const tempoTotal = acumulado + extra;
-
-                  return (
-                    <Card key={s.id} className="border-border p-3">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="font-medium text-sm">{s.apelido}</span>
-                        <Badge variant="outline" className={estiloStatus}>
-                          {iconeStatus}
-                        </Badge>
+          {loading ? (
+            <div className="flex min-h-40 items-center justify-center text-muted-foreground"><Loader2 className="mr-2 animate-spin" size={18} /> Carregando jogadores…</div>
+          ) : jogadoresFiltrados.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
+              {users.length === 0 ? "Nenhum jogador cadastrado." : "Nenhum jogador neste filtro."}
+            </div>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {jogadoresFiltrados.map(({ usuario, sessao, status }) => {
+                const nome = usuario.apelido || usuario.username;
+                const tempo = sessao ? duracaoAtual(sessao) : Math.max(0, Number(usuario.total_segundos) || 0);
+                return (
+                  <article key={usuario.id} className="min-w-0 rounded-xl border border-border/80 bg-card/70 p-4 shadow-sm">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-violet-300/20 bg-violet-300/10 text-sm font-bold text-violet-100">
+                          {usuario.avatar_url ? <img src={usuario.avatar_url} alt="" className="h-full w-full object-cover" /> : nome.slice(0, 1).toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="truncate font-semibold">{nome}</p>
+                          <p className="truncate text-xs text-muted-foreground">@{usuario.username}</p>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-3 text-xs text-muted-foreground mb-3">
-                        <span>Acumulado: {formatHMS(acumulado)}</span>
-                        <span>•</span>
-                        <span>Total agora: {formatHMS(tempoTotal)}</span>
+                      <Badge variant="outline" className={`shrink-0 ${classeStatus(status)}`}>
+                        {status === "ativa" ? <Play size={11} className="mr-1" /> : status === "pausada" ? <Pause size={11} className="mr-1" /> : <Shield size={11} className="mr-1" />}
+                        {textoStatus(status)}
+                      </Badge>
+                    </div>
+                    <div className="mt-4 flex items-center justify-between gap-2 border-t border-border/70 pt-3">
+                      <span className="text-xs text-muted-foreground">{sessao ? (status === "ativa" ? "Sessão atual" : "Tempo da sessão") : "Total acumulado"}</span>
+                      <span className="font-mono text-base font-bold tabular-nums">{formatHMS(tempo)}</span>
+                    </div>
+                    {sessao && (
+                      <div className="mt-3 flex gap-2">
+                        {status === "ativa" ? (
+                          <Button size="sm" variant="outline" onClick={() => void executarAcao("pausar", sessao.id)} className="flex-1 gap-1.5 border-violet-300/30 text-violet-100"><Pause size={13} /> Pausar</Button>
+                        ) : (
+                          <Button size="sm" variant="outline" onClick={() => void executarAcao("retomar", sessao.id)} className="flex-1 gap-1.5 border-cyan-300/30 text-cyan-100"><Play size={13} /> Retomar</Button>
+                        )}
+                        <Button size="sm" variant="destructive" onClick={() => {
+                          if (window.confirm(`Encerrar a sessão de ${nome}?`)) void executarAcao("encerrar", sessao.id);
+                        }} className="flex-1 gap-1.5"><Square size={13} /> Encerrar</Button>
                       </div>
-                      <div className="flex gap-2">
-                        {s.status === "ativa" && (
-                          <>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => pausarSessao(s.id)}
-                              className="h-7 gap-1.5 border-yellow-500/30 px-2 text-[10px] text-yellow-400 hover:bg-yellow-500/10 hover:text-yellow-300"
-                            >
-                              <Pause size={11} /> Pausar
-                            </Button>
-                          </>
-                        )}
-                        {s.status === "pausada" && (
-                          <>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => retomarSessao(s.id)}
-                              className="h-7 gap-1.5 border-sky-500/30 px-2 text-[10px] text-sky-300 hover:bg-sky-500/10 hover:text-sky-200"
-                            >
-                              <Play size={11} /> Retomar
-                            </Button>
-                          </>
-                        )}
-                        {s.status !== "encerrada" && (
-                          <>
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              onClick={() => pararSessao(s.id)}
-                              className="h-7 gap-1.5 border-red-500/30 px-2 text-[10px] text-red-400 hover:bg-red-500/10 hover:text-red-300"
-                            >
-                              <Square size={11} /> Encerrar
-                            </Button>
-                          </>
-                        )}
-                      </div>
-                    </Card>
-                  );
-                })}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                    )}
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
-        {/* Controles em lote */}
-        <Card>
-          <CardHeader className="flex items-center gap-2">
-            <Activity size={18} className="text-primary" />
-            <CardTitle>Ações em Lote</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {sessoes.length > 0 ? (
-              <div className="space-y-3">
-                <div>
-                  <p className="text-xs text-muted-foreground">Pausar todas:</p>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={pausarTodos}
-                    className="w-full h-9 border-yellow-500/30 px-3 text-[10px] text-yellow-400 hover:bg-yellow-500/10 hover:text-yellow-300"
-                    disabled={showPausarAll}
-                  >
-                    {showPausarAll ? "Pausando..." : "Pausar Todas"}
-                  </Button>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Parar todas:</p>
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    onClick={pararTodos}
-                    className="w-full h-9 border-red-500/30 px-3 text-[10px] text-red-400 hover:bg-red-500/10 hover:text-red-300"
-                    disabled={showPararAll}
-                  >
-                    {showPararAll ? "Encerrando..." : "Parar Todas"}
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <p className="text-muted-foreground text-sm">Nenhuma sessão para ações em lote</p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Estatísticas resumidas */}
-      <div className="grid md:grid-cols-3 gap-4">
-        <Card>
-          <CardHeader>
-            <Clock size={18} className="text-primary" />
-            <CardTitle>Sessões Ativas</CardTitle>
-          </CardHeader>
-          <CardContent className="p-4">
-            <div className="text-3xl font-bold text-primary">{sessoes.filter((s) => s.status === "ativa").length}</div>
-            <div className="text-xs text-muted-foreground">total</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <Pause size={18} className="text-yellow-400" />
-            <CardTitle>Sessões Pausadas</CardTitle>
-          </CardHeader>
-          <CardContent className="p-4">
-            <div className="text-3xl font-bold text-yellow-400">{sessoes.filter((s) => s.status === "pausada").length}</div>
-            <div className="text-xs text-muted-foreground">total</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <Square size={18} className="text-red-400" />
-            <CardTitle>Sessões Encerradas</CardTitle>
-          </CardHeader>
-          <CardContent className="p-4">
-            <div className="text-3xl font-bold text-red-400">{sessoes.filter((s) => s.status === "encerrada").length}</div>
-            <div className="text-xs text-muted-foreground">total</div>
-          </CardContent>
-        </Card>
-      </div>
+      <Card>
+        <CardHeader><CardTitle className="flex items-center gap-2"><Clock size={18} className="text-primary" /> Ações gerais</CardTitle></CardHeader>
+        <CardContent className="grid gap-2 sm:grid-cols-3">
+          <Button variant="outline" disabled={!ativas} onClick={() => confirmarAcaoEmLote("pausar_todos")} className="gap-2"><Pause size={15} /> Pausar ativos</Button>
+          <Button variant="outline" disabled={!pausadas} onClick={() => confirmarAcaoEmLote("despausar_todos")} className="gap-2"><Play size={15} /> Retomar pausados</Button>
+          <Button variant="destructive" disabled={!sessoes.length} onClick={() => confirmarAcaoEmLote("encerrar")} className="gap-2"><Square size={15} /> Encerrar sessões</Button>
+        </CardContent>
+      </Card>
     </div>
   );
 }
+

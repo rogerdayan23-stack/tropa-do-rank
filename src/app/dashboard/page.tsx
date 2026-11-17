@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -30,6 +30,7 @@ export default function DashboardPage() {
   const [segundosBase, setSegundosBase] = useState(0);
   const [statusAtual, setStatusAtual] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const timerSyncRef = useRef<{ segundos: number; sincronizadoEm: number } | null>(null);
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -52,24 +53,33 @@ export default function DashboardPage() {
         const maisRecente = lista[0];
 
         if (ativaOuPausada && ativaOuPausada.status === "ativa") {
+          const duracao = Math.max(0, Number(ativaOuPausada.duracao ?? ativaOuPausada.segundos_acumulados) || 0);
+          timerSyncRef.current = { segundos: duracao, sincronizadoEm: performance.now() };
           setSessao(ativaOuPausada);
           setInicioAtual(ativaOuPausada.inicio);
           setSegundosBase(ativaOuPausada.segundos_acumulados || 0);
+          setSegundos(duracao);
           setStatusAtual("ativa");
           setExpirada(false);
         } else if (ativaOuPausada && ativaOuPausada.status === "pausada") {
+          const duracao = Math.max(0, Number(ativaOuPausada.duracao ?? ativaOuPausada.segundos_acumulados) || 0);
+          timerSyncRef.current = null;
           setSessao(ativaOuPausada);
           setSegundosBase(ativaOuPausada.segundos_acumulados || 0);
+          setSegundos(duracao);
           setStatusAtual("pausada");
           setExpirada(false);
         } else if (maisRecente && maisRecente.status === "expirada") {
+          timerSyncRef.current = null;
           setSessao(null);
           setStatusAtual("expirada");
           setExpirada(true);
           toast.error(`Sessão expirada por tempo limite (${LIMITE_SESSAO_SEGUNDOS / 3600}h)`);
         } else {
+          timerSyncRef.current = null;
           setSessao(null);
           setStatusAtual(null);
+          setSegundos(0);
           setExpirada(false);
         }
       } catch {
@@ -78,7 +88,7 @@ export default function DashboardPage() {
     };
 
     carregar();
-    interval = setInterval(carregar, 1000);
+    interval = setInterval(carregar, 5000);
     hbInterval = setInterval(() => {
       fetch("/api/heartbeat", { method: "POST", body: JSON.stringify({ id: sessao?.id }) }).catch(() => {});
     }, 60000);
@@ -92,10 +102,11 @@ export default function DashboardPage() {
   useEffect(() => {
     if (statusAtual === "ativa" && inicioAtual) {
       const tick = () => {
-        const agora = Date.now();
-        const desdeInicio = Math.floor((agora - new Date(inicioAtual).getTime()) / 1000);
-        setSegundos((segundosBase || 0) + desdeInicio);
-        if ((segundosBase || 0) + desdeInicio >= LIMITE_SESSAO_SEGUNDOS) {
+        const sincronizacao = timerSyncRef.current;
+        if (!sincronizacao) return;
+        const total = Math.max(0, sincronizacao.segundos + Math.floor((performance.now() - sincronizacao.sincronizadoEm) / 1000));
+        setSegundos(total);
+        if (total >= LIMITE_SESSAO_SEGUNDOS) {
           setExpirada(true);
         }
       };
@@ -227,10 +238,10 @@ export default function DashboardPage() {
 
           {isAdmin && (
             <>
-              <Button onClick={pausarTodos} disabled={loading} variant="outline" className="h-11 px-2 text-xs border-orange-500/40 text-orange-400 hover:bg-orange-500/10 sm:h-12 sm:px-4 sm:text-sm">
+              <Button onClick={pausarTodos} disabled={loading} variant="outline" className="h-11 px-2 text-xs border-violet-400/35 text-violet-200 hover:bg-violet-400/10 sm:h-12 sm:px-4 sm:text-sm">
                 <Pause size={18} className="mr-2" /> Pausar Todos
               </Button>
-              <Button onClick={despausarTodos} disabled={loading} variant="outline" className="h-11 px-2 text-xs border-green-500/40 text-green-400 hover:bg-green-500/10 sm:h-12 sm:px-4 sm:text-sm">
+              <Button onClick={despausarTodos} disabled={loading} variant="outline" className="h-11 px-2 text-xs border-primary/40 text-primary hover:bg-primary/10 sm:h-12 sm:px-4 sm:text-sm">
                 <Play size={18} className="mr-2" /> Despausar Todos
               </Button>
               <Button onClick={contagem} disabled={loading} variant="outline" className="h-11 px-2 text-xs border-primary/40 text-primary hover:bg-primary/10 sm:h-12 sm:px-4 sm:text-sm">
@@ -315,13 +326,13 @@ export default function DashboardPage() {
       {isAdmin && (
         <div className="grid sm:grid-cols-2 gap-4">
           <Card
-            className="border-orange-500/20 hover:border-orange-500/40 cursor-pointer transition-all hover:bg-orange-500/5"
+            className="border-violet-400/20 hover:border-violet-400/40 cursor-pointer transition-all hover:bg-violet-400/5"
             onClick={() => router.push("/penalidades")}
           >
             <CardContent className="pt-4 pb-4">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-orange-500/20 flex items-center justify-center">
-                  <AlertTriangle size={18} className="text-orange-400" />
+                <div className="w-10 h-10 rounded-lg bg-violet-400/15 flex items-center justify-center">
+                  <AlertTriangle size={18} className="text-violet-200" />
                 </div>
                 <div>
                   <p className="font-semibold text-sm">Penalidades</p>
@@ -351,3 +362,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+

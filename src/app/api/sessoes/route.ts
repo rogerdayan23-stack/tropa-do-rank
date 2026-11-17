@@ -44,7 +44,7 @@ export async function GET() {
       id: s.id,
       inicio: s.inicio,
       fim: s.fim,
-      duracao,
+      duracao: Math.max(0, duracao),
       segundos_acumulados: s.segundos_acumulados || 0,
       status: s.status,
       ultima_atividade: s.ultima_atividade,
@@ -53,3 +53,4 @@ export async function GET() {
 
   return NextResponse.json({ sessoes });
 }
+

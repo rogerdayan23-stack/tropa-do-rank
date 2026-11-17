@@ -23,7 +23,7 @@ export default function RootLayout({
         <Providers>
           <Sidebar />
           <main className="lg:ml-60 min-h-screen pb-12 px-4 sm:px-6 lg:px-8 pt-6">
-            <div className="max-w-5xl mx-auto">{children}</div>
+            <div className="max-w-6xl mx-auto">{children}</div>
           </main>
         </Providers>
       </body>

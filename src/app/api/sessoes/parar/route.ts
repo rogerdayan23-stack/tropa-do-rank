@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { getUserFromRequest } from "@/lib/auth";
-import { STATUS_ATIVA, construirAtualizacaoSessao, logContagemSessao } from "@/lib/sessao";
+import { STATUS_ATIVA, calcularDuracaoSessao, logContagemSessao } from "@/lib/sessao";
 
 export async function POST(req: NextRequest) {
   const user = await getUserFromRequest();
@@ -26,10 +26,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Sessão não encontrada" }, { status: 404 });
   }
 
-  let acumulado = sessao.segundos_acumulados || 0;
-  if (sessao.status === STATUS_ATIVA && sessao.inicio) {
-    acumulado += Math.floor((Date.now() - new Date(sessao.inicio).getTime()) / 1000);
-  }
+  const acumulado = calcularDuracaoSessao(sessao);
 
   const { error: updError } = await service
     .from("sessoes")
@@ -54,3 +51,4 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ ok: true, total_segundos: acumulado });
 }
+
