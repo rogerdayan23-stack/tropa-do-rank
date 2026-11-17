@@ -110,7 +110,9 @@ export default function SaldosPage() {
   }, []);
 
   useEffect(() => {
-    buscarSaldos();
+    void buscarSaldos();
+    const intervalo = setInterval(() => void buscarSaldos(false), 10000);
+    return () => clearInterval(intervalo);
   }, [dataSel]);
 
   async function verificarAdmin() {
@@ -124,16 +126,18 @@ export default function SaldosPage() {
     }
   }
 
-  async function buscarSaldos() {
+  async function buscarSaldos(atualizarInputLucro = true) {
     try {
-      const res = await fetch(`/api/saldos?data=${dataSel}`);
+      const res = await fetch(`/api/saldos?data=${dataSel}`, { cache: "no-store" });
       const data: SaldoData = await res.json();
       if (res.ok) {
         setSaldoData(data);
-        if (data.dia_selecionado?.lucro_dia > 0) {
-          setValorLucroInput(data.dia_selecionado.lucro_dia.toString());
-        } else {
-          setValorLucroInput("");
+        if (atualizarInputLucro) {
+          if (data.dia_selecionado?.lucro_dia > 0) {
+            setValorLucroInput(data.dia_selecionado.lucro_dia.toString());
+          } else {
+            setValorLucroInput("");
+          }
         }
       } else {
         toast.error("Erro ao carregar saldos");
@@ -502,7 +506,7 @@ export default function SaldosPage() {
                         <div>
                           <p className="font-semibold text-foreground">{j.username}</p>
                           <p className="text-[11px] text-muted-foreground">
-                            {j.horas_semana > 0 ? "Farming ativo" : "Sem sessões"}
+                            {j.horas_semana > 0 ? "Horas contabilizadas" : "Sem horas no período"}
                           </p>
                         </div>
                       </div>
@@ -592,7 +596,7 @@ export default function SaldosPage() {
                     <Avatar url={j.avatar_url} nome={j.username} />
                     <div className="min-w-0">
                       <p className="truncate font-semibold">{j.username}</p>
-                      <p className="text-xs text-muted-foreground">{j.horas_semana > 0 ? "Farming ativo" : "Sem sessões"}</p>
+                      <p className="text-xs text-muted-foreground">{j.horas_semana > 0 ? "Horas contabilizadas" : "Sem horas no período"}</p>
                     </div>
                   </div>
                   {j.pago ? (
@@ -678,3 +682,4 @@ export default function SaldosPage() {
     </div>
   );
 }
+

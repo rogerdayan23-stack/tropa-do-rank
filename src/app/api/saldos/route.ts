@@ -1,7 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserFromRequest, isManager } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase";
+import { calcularDuracaoSessao, type SessaoRow } from "@/lib/sessao";
 import crypto from "crypto";
+
+function lerAjusteManualEmSegundos(detalhe: string | null): number {
+  if (!detalhe) return 0;
+
+  // Formato atual, explícito e fácil de auditar. A segunda expressão mantém
+  // compatibilidade com os lançamentos anteriores, que guardavam o total
+  // antes e depois do ajuste no texto do log.
+  const marcado = detalhe.match(/\[ajuste-semanal:([+-]?\d+)s\]/i);
+  if (marcado) return Number(marcado[1]) || 0;
+
+  const totais = detalhe.match(/\((-?\d+)s\s*→\s*(-?\d+)s\)/);
+  if (totais) return (Number(totais[2]) || 0) - (Number(totais[1]) || 0);
+
+  return 0;
+}
 
 function getIntervaloSemana(dataStr: string) {
   const [ano, mes, dia] = dataStr.split("-").map(Number);
@@ -77,7 +93,19 @@ export async function GET(req: NextRequest) {
       .gte("inicio", semana.inicioISO)
       .lte("inicio", semana.fimISO);
 
-    if (sessoesErr) console.error("Erro ao buscar sessões:", sessoesErr);
+    if (sessoesErr) throw sessoesErr;
+
+    // Ajustes feitos pelo Admin Master também são horas do período financeiro.
+    // Eles ficam no log de auditoria, então não dependem de uma tabela nova.
+    const { data: ajustesRows, error: ajustesErr } = await supabase
+      .from("logs")
+      .select("user_id, acao, detalhe, criado_em")
+      .in("acao", ["admin_adjust_user_hours", "admin_reset_user"])
+      .gte("criado_em", `${semana.inicioStr}T00:00:00.000Z`)
+      .lte("criado_em", `${semana.fimStr}T23:59:59.999Z`)
+      .order("criado_em", { ascending: true });
+
+    if (ajustesErr) throw ajustesErr;
 
     // 4. Agrupa segundos por usuário e por data
     const segundosPorUsuarioPorDia: Record<string, Record<string, number>> = {};
@@ -85,11 +113,57 @@ export async function GET(req: NextRequest) {
       segundosPorUsuarioPorDia[u.id] = {};
     }
 
+    const ultimoResetPorUsuario: Record<string, number> = {};
+    for (const registro of (ajustesRows || [])) {
+      if (registro.acao !== "admin_reset_user" || !registro.user_id || !registro.criado_em) continue;
+      ultimoResetPorUsuario[registro.user_id] = Math.max(
+        ultimoResetPorUsuario[registro.user_id] || 0,
+        new Date(registro.criado_em).getTime(),
+      );
+    }
+
     for (const s of (sessoes || [])) {
       if (!s.user_id || !segundosPorUsuarioPorDia[s.user_id]) continue;
+      const inicioMs = new Date(s.inicio || "").getTime();
+      if (inicioMs <= (ultimoResetPorUsuario[s.user_id] || 0)) continue;
       const diaSessao = (s.inicio || "").substring(0, 10);
       if (!diaSessao) continue;
-      segundosPorUsuarioPorDia[s.user_id][diaSessao] = (segundosPorUsuarioPorDia[s.user_id][diaSessao] || 0) + (s.segundos_acumulados || 0);
+      const segundosDaSessao = Math.max(0, calcularDuracaoSessao(s as SessaoRow));
+      segundosPorUsuarioPorDia[s.user_id][diaSessao] = (segundosPorUsuarioPorDia[s.user_id][diaSessao] || 0) + segundosDaSessao;
+    }
+
+    for (const registro of (ajustesRows || [])) {
+      if (!registro.user_id || !segundosPorUsuarioPorDia[registro.user_id]) continue;
+      if (registro.acao === "admin_reset_user") {
+        // O reset abaixo é aplicado como limite para as sessões e ajustes.
+        continue;
+      }
+      if (new Date(registro.criado_em || "").getTime() <= (ultimoResetPorUsuario[registro.user_id] || 0)) continue;
+
+      const diaAjuste = (registro.criado_em || "").substring(0, 10);
+      const segundosAjuste = lerAjusteManualEmSegundos(registro.detalhe);
+      if (!diaAjuste || !segundosAjuste) continue;
+      const horasDoUsuario = segundosPorUsuarioPorDia[registro.user_id];
+
+      if (segundosAjuste > 0) {
+        horasDoUsuario[diaAjuste] = (horasDoUsuario[diaAjuste] || 0) + segundosAjuste;
+        continue;
+      }
+
+      // Descontos reduzem primeiro o dia do ajuste; o excedente tira horas
+      // dos dias anteriores da semana, sem permitir saldo negativo.
+      let restante = Math.abs(segundosAjuste);
+      const diasParaDescontar = [
+        diaAjuste,
+        ...Object.keys(horasDoUsuario).filter((dia) => dia < diaAjuste).sort().reverse(),
+      ];
+      for (const dia of diasParaDescontar) {
+        const disponivel = Math.max(0, horasDoUsuario[dia] || 0);
+        const descontado = Math.min(disponivel, restante);
+        horasDoUsuario[dia] = disponivel - descontado;
+        restante -= descontado;
+        if (restante === 0) break;
+      }
     }
 
     // 5. Converte para horas arredondadas de 30 em 30 minutos
@@ -274,3 +348,4 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Erro interno ao salvar lucro diário" }, { status: 500 });
   }
 }
+
