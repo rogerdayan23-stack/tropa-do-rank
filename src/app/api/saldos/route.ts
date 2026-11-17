@@ -155,7 +155,7 @@ export async function GET(req: NextRequest) {
       let restante = Math.abs(segundosAjuste);
       const diasParaDescontar = [
         diaAjuste,
-        ...Object.keys(horasDoUsuario).filter((dia) => dia !== diaAjuste).sort().reverse(),
+        ...Object.keys(horasDoUsuario).filter((dia) => dia < diaAjuste).sort().reverse(),
       ];
       for (const dia of diasParaDescontar) {
         const disponivel = Math.max(0, horasDoUsuario[dia] || 0);
