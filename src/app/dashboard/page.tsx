@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -30,6 +30,7 @@ export default function DashboardPage() {
   const [segundosBase, setSegundosBase] = useState(0);
   const [statusAtual, setStatusAtual] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const timerSyncRef = useRef<{ segundos: number; sincronizadoEm: number } | null>(null);
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -52,24 +53,33 @@ export default function DashboardPage() {
         const maisRecente = lista[0];
 
         if (ativaOuPausada && ativaOuPausada.status === "ativa") {
+          const duracao = Math.max(0, Number(ativaOuPausada.duracao ?? ativaOuPausada.segundos_acumulados) || 0);
+          timerSyncRef.current = { segundos: duracao, sincronizadoEm: performance.now() };
           setSessao(ativaOuPausada);
           setInicioAtual(ativaOuPausada.inicio);
           setSegundosBase(ativaOuPausada.segundos_acumulados || 0);
+          setSegundos(duracao);
           setStatusAtual("ativa");
           setExpirada(false);
         } else if (ativaOuPausada && ativaOuPausada.status === "pausada") {
+          const duracao = Math.max(0, Number(ativaOuPausada.duracao ?? ativaOuPausada.segundos_acumulados) || 0);
+          timerSyncRef.current = null;
           setSessao(ativaOuPausada);
           setSegundosBase(ativaOuPausada.segundos_acumulados || 0);
+          setSegundos(duracao);
           setStatusAtual("pausada");
           setExpirada(false);
         } else if (maisRecente && maisRecente.status === "expirada") {
+          timerSyncRef.current = null;
           setSessao(null);
           setStatusAtual("expirada");
           setExpirada(true);
           toast.error(`Sessão expirada por tempo limite (${LIMITE_SESSAO_SEGUNDOS / 3600}h)`);
         } else {
+          timerSyncRef.current = null;
           setSessao(null);
           setStatusAtual(null);
+          setSegundos(0);
           setExpirada(false);
         }
       } catch {
@@ -78,7 +88,7 @@ export default function DashboardPage() {
     };
 
     carregar();
-    interval = setInterval(carregar, 1000);
+    interval = setInterval(carregar, 5000);
     hbInterval = setInterval(() => {
       fetch("/api/heartbeat", { method: "POST", body: JSON.stringify({ id: sessao?.id }) }).catch(() => {});
     }, 60000);
@@ -92,10 +102,11 @@ export default function DashboardPage() {
   useEffect(() => {
     if (statusAtual === "ativa" && inicioAtual) {
       const tick = () => {
-        const agora = Date.now();
-        const desdeInicio = Math.floor((agora - new Date(inicioAtual).getTime()) / 1000);
-        setSegundos((segundosBase || 0) + desdeInicio);
-        if ((segundosBase || 0) + desdeInicio >= LIMITE_SESSAO_SEGUNDOS) {
+        const sincronizacao = timerSyncRef.current;
+        if (!sincronizacao) return;
+        const total = Math.max(0, sincronizacao.segundos + Math.floor((performance.now() - sincronizacao.sincronizadoEm) / 1000));
+        setSegundos(total);
+        if (total >= LIMITE_SESSAO_SEGUNDOS) {
           setExpirada(true);
         }
       };
@@ -351,3 +362,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+
