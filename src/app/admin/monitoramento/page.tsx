@@ -148,7 +148,7 @@ export default function AdminMasterMonitor() {
       case "ativa":
         return "border-primary/30 bg-primary/10 text-primary";
       case "pausada":
-        return "border-yellow-500/30 bg-yellow-500/10 text-yellow-300";
+        return "border-cyan-400/30 bg-cyan-400/10 text-cyan-200";
       case "encerrada":
         return "border-red-500/30 bg-red-500/10 text-red-300";
       default:
@@ -161,7 +161,7 @@ export default function AdminMasterMonitor() {
       case "ativa":
         return <Play size={12} className="text-primary" />;
       case "pausada":
-        return <Pause size={12} className="text-yellow-400" />;
+        return <Pause size={12} className="text-cyan-300" />;
       case "encerrada":
         return <Square size={12} className="text-red-400" />;
       default:
@@ -347,8 +347,8 @@ export default function AdminMasterMonitor() {
       {/* Cabeçalho */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-yellow-400/30 bg-yellow-400/10">
-            <Crown size={24} className="text-yellow-400" />
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-violet-300/30 bg-violet-300/10">
+            <Crown size={24} className="text-violet-200" />
           </div>
           <div>
             <h1 className="text-3xl font-black tracking-tight">ADMIN MASTER - MONITORAMENTO</h1>
@@ -362,7 +362,7 @@ export default function AdminMasterMonitor() {
           <Badge variant="outline" className="border-border/60 gap-1.5 px-3 py-1">
             <Users size={12} /> {users.length} usuários cadastrados
           </Badge>
-          <Badge variant="outline" className="border-yellow-400/40 gap-1.5 px-3 py-1 text-yellow-300">
+          <Badge variant="outline" className="border-violet-300/35 gap-1.5 px-3 py-1 text-violet-200">
             <Crown size={12} /> Uptime
           </Badge>
         </div>
@@ -407,7 +407,7 @@ export default function AdminMasterMonitor() {
                               size="sm"
                               variant="outline"
                               onClick={() => pausarSessao(s.id)}
-                              className="h-7 gap-1.5 border-yellow-500/30 px-2 text-[10px] text-yellow-400 hover:bg-yellow-500/10 hover:text-yellow-300"
+                              className="h-7 gap-1.5 border-violet-300/25 px-2 text-[10px] text-violet-200 hover:bg-violet-300/10 hover:text-violet-100"
                             >
                               <Pause size={11} /> Pausar
                             </Button>
@@ -419,7 +419,7 @@ export default function AdminMasterMonitor() {
                               size="sm"
                               variant="outline"
                               onClick={() => retomarSessao(s.id)}
-                              className="h-7 gap-1.5 border-sky-500/30 px-2 text-[10px] text-sky-300 hover:bg-sky-500/10 hover:text-sky-200"
+                              className="h-7 gap-1.5 border-cyan-400/30 px-2 text-[10px] text-cyan-200 hover:bg-cyan-400/10 hover:text-cyan-100"
                             >
                               <Play size={11} /> Retomar
                             </Button>
@@ -461,7 +461,7 @@ export default function AdminMasterMonitor() {
                     size="sm"
                     variant="outline"
                     onClick={pausarTodos}
-                    className="w-full h-9 border-yellow-500/30 px-3 text-[10px] text-yellow-400 hover:bg-yellow-500/10 hover:text-yellow-300"
+                    className="w-full h-9 border-violet-300/25 px-3 text-[10px] text-violet-200 hover:bg-violet-300/10 hover:text-violet-100"
                     disabled={showPausarAll}
                   >
                     {showPausarAll ? "Pausando..." : "Pausar Todas"}
@@ -501,11 +501,11 @@ export default function AdminMasterMonitor() {
         </Card>
         <Card>
           <CardHeader>
-            <Pause size={18} className="text-yellow-400" />
+            <Pause size={18} className="text-cyan-300" />
             <CardTitle>Sessões Pausadas</CardTitle>
           </CardHeader>
           <CardContent className="p-4">
-            <div className="text-3xl font-bold text-yellow-400">{sessoes.filter((s) => s.status === "pausada").length}</div>
+            <div className="text-3xl font-bold text-cyan-200">{sessoes.filter((s) => s.status === "pausada").length}</div>
             <div className="text-xs text-muted-foreground">total</div>
           </CardContent>
         </Card>

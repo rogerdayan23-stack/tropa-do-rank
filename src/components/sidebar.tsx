@@ -115,8 +115,8 @@ export function Sidebar() {
     <div className="flex flex-col h-full">
       {/* Logo */}
       <div className="flex items-center gap-3 px-4 py-5 border-b border-border/40">
-        <div className="relative flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border border-yellow-400/35 bg-gradient-to-br from-indigo-500/20 to-blue-500/10 shadow-[0_0_18px_rgba(99,102,241,0.12)]">
-          <Crown size={21} strokeWidth={2.2} className="text-yellow-300" />
+        <div className="relative flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border border-violet-300/35 bg-gradient-to-br from-violet-500/25 to-cyan-400/10 shadow-[0_0_20px_rgba(139,92,246,0.15)]">
+          <Crown size={21} strokeWidth={2.2} className="text-violet-200" />
         </div>
         <div className="min-w-0">
           <p className="whitespace-nowrap text-[11px] font-black tracking-[0.08em] text-foreground">RANK DOS CUIUDOS</p>
@@ -216,7 +216,7 @@ export function Sidebar() {
       {/* Sidebar — desktop fixed, mobile slide */}
       <aside
         className={cn(
-          "fixed left-0 top-0 h-screen w-60 bg-[#0a0a0a] border-r border-border/40 z-40 transition-transform duration-200",
+          "fixed left-0 top-0 h-screen w-60 bg-[#090c14] border-r border-border/60 z-40 transition-transform duration-200",
           "lg:translate-x-0",
           open ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         )}

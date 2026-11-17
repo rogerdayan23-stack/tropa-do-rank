@@ -67,13 +67,13 @@ const estiloPodio: Record<
   }
 > = {
   1: {
-    borda: "border-yellow-400/60",
-    fundo: "bg-gradient-to-b from-yellow-500/20 via-amber-500/5 to-transparent",
-    texto: "text-yellow-300",
+    borda: "border-violet-300/55",
+    fundo: "bg-gradient-to-b from-violet-400/20 via-indigo-500/5 to-transparent",
+    texto: "text-violet-200",
     icone: Crown,
     rotulo: "Campeão",
-    badge: "bg-yellow-400 text-black",
-    anel: "ring-yellow-400/50",
+    badge: "bg-violet-300 text-slate-950",
+    anel: "ring-violet-300/50",
     altura: "sm:-translate-y-6",
   },
   2: {
@@ -87,13 +87,13 @@ const estiloPodio: Record<
     altura: "",
   },
   3: {
-    borda: "border-amber-700/50",
-    fundo: "bg-gradient-to-b from-amber-700/20 via-amber-700/5 to-transparent",
-    texto: "text-amber-500",
+    borda: "border-cyan-400/35",
+    fundo: "bg-gradient-to-b from-cyan-400/12 via-sky-500/5 to-transparent",
+    texto: "text-cyan-200",
     icone: Medal,
     rotulo: "3º lugar",
-    badge: "bg-amber-700 text-white",
-    anel: "ring-amber-600/40",
+    badge: "bg-cyan-500/80 text-slate-950",
+    anel: "ring-cyan-300/35",
     altura: "",
   },
 };
@@ -110,7 +110,7 @@ function PodioCard({ u }: { u: RankingEntry }) {
         estilo.borda,
         estilo.fundo,
         primeiro
-          ? "shadow-[0_0_45px_rgba(250,204,21,0.12)] sm:p-6"
+          ? "shadow-[0_0_45px_rgba(139,92,246,0.14)] sm:p-6"
           : "shadow-lg",
         estilo.altura
       )}
@@ -156,7 +156,7 @@ function PodioCard({ u }: { u: RankingEntry }) {
 
         <div className="w-full rounded-xl border border-white/5 bg-black/40 px-3 py-2">
           <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Tempo total</p>
-          <p className={cn("font-mono font-bold", primeiro ? "text-2xl text-yellow-300" : "text-lg")}>
+          <p className={cn("font-mono font-bold", primeiro ? "text-2xl text-violet-200" : "text-lg")}>
             {formatHMS(u.total_segundos)}
           </p>
         </div>
@@ -222,27 +222,27 @@ export default function RankingPage() {
       {!loading && top3.length > 0 && (
         <div className="space-y-3 pt-3 md:hidden">
           {top3[0] && (
-            <article className="relative overflow-hidden rounded-3xl border border-yellow-400/50 bg-gradient-to-br from-yellow-400/[0.18] via-amber-500/[0.07] to-card p-5 shadow-[0_12px_45px_rgba(250,204,21,0.08)]">
-              <div className="pointer-events-none absolute -right-10 -top-14 h-40 w-40 rounded-full bg-yellow-400/10 blur-3xl" />
+            <article className="relative overflow-hidden rounded-3xl border border-violet-300/45 bg-gradient-to-br from-violet-400/[0.17] via-indigo-500/[0.07] to-card p-5 shadow-[0_12px_45px_rgba(139,92,246,0.12)]">
+              <div className="pointer-events-none absolute -right-10 -top-14 h-40 w-40 rounded-full bg-violet-400/10 blur-3xl" />
               <div className="relative flex items-center gap-4">
-                <div className="relative shrink-0 rounded-full p-1 ring-2 ring-yellow-400/70 ring-offset-2 ring-offset-[#111]">
+                <div className="relative shrink-0 rounded-full p-1 ring-2 ring-violet-300/70 ring-offset-2 ring-offset-[#0b0e18]">
                   <Avatar url={top3[0].avatar_url} nome={nomeJogador(top3[0])} size="lg" />
-                  <span className="absolute -bottom-1 -right-1 flex h-8 w-8 items-center justify-center rounded-full border-2 border-[#111] bg-yellow-400 text-black shadow-lg">
+                  <span className="absolute -bottom-1 -right-1 flex h-8 w-8 items-center justify-center rounded-full border-2 border-[#0b0e18] bg-violet-300 text-slate-950 shadow-lg">
                     <Crown size={16} />
                   </span>
                 </div>
                 <div className="min-w-0 flex-1">
-                  <span className="inline-flex items-center gap-1 rounded-full border border-yellow-400/30 bg-yellow-400/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-yellow-200">
+                  <span className="inline-flex items-center gap-1 rounded-full border border-violet-300/30 bg-violet-300/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-violet-100">
                     <Trophy size={11} /> Líder da tropa
                   </span>
                   <h2 className="mt-2 truncate text-xl font-black tracking-tight text-white">{nomeJogador(top3[0])}</h2>
-                  <p className="text-xs text-yellow-200/70">1º lugar · campeão</p>
+                  <p className="text-xs text-violet-100/70">1º lugar · campeão</p>
                 </div>
               </div>
               <div className="relative mt-5 flex items-end justify-between gap-3 rounded-2xl border border-white/5 bg-black/35 px-4 py-3">
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-widest text-yellow-100/60">Tempo total de farm</p>
-                  <p className="mt-1 font-mono text-2xl font-black tracking-tight text-yellow-300">{formatHMS(top3[0].total_segundos)}</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-violet-100/60">Tempo total de farm</p>
+                  <p className="mt-1 font-mono text-2xl font-black tracking-tight text-violet-200">{formatHMS(top3[0].total_segundos)}</p>
                 </div>
                 <div className="pb-1 text-right">
                   <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Vantagem</p>
@@ -259,11 +259,11 @@ export default function RankingPage() {
                 return (
                   <article key={u.posicao} className={cn(
                     "min-w-0 rounded-2xl border p-3.5",
-                    vice ? "border-slate-300/30 bg-gradient-to-br from-slate-300/[0.10] to-card" : "border-amber-700/40 bg-gradient-to-br from-amber-700/[0.13] to-card"
+                    vice ? "border-slate-300/30 bg-gradient-to-br from-slate-300/[0.10] to-card" : "border-cyan-400/30 bg-gradient-to-br from-cyan-400/[0.10] to-card"
                   )}>
                     <div className="flex items-center justify-between gap-2">
-                      <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-black", vice ? "bg-slate-200 text-slate-900" : "bg-amber-700 text-white")}>{u.posicao}º</span>
-                      {vice ? <Medal size={15} className="text-slate-200" /> : <Medal size={15} className="text-amber-500" />}
+                      <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-black", vice ? "bg-slate-200 text-slate-900" : "bg-cyan-400 text-slate-950")}>{u.posicao}º</span>
+                      {vice ? <Medal size={15} className="text-slate-200" /> : <Medal size={15} className="text-cyan-300" />}
                     </div>
                     <div className="mt-3 flex items-center gap-2.5">
                       <Avatar url={u.avatar_url} nome={nomeJogador(u)} size="sm" />
@@ -436,7 +436,7 @@ export default function RankingPage() {
             </p>
           </div>
           <div className="flex items-center gap-3 rounded-xl border border-border/50 bg-card/40 px-4 py-3">
-            <Zap size={16} className="text-yellow-400" />
+            <Zap size={16} className="text-violet-200" />
             <p className="text-xs text-muted-foreground">
               A proporção das barras é calculada sobre o tempo do <strong className="text-foreground">1º colocado</strong>.
             </p>

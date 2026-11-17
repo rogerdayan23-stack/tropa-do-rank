@@ -4,26 +4,26 @@
 
 @layer base {
   :root {
-    --background: 228 14% 7%;
-    --foreground: 225 18% 95%;
-    --card: 228 12% 10%;
-    --card-foreground: 225 18% 95%;
-    --popover: 228 12% 10%;
-    --popover-foreground: 225 18% 95%;
-    --primary: 231 92% 70%;
-    --primary-foreground: 232 35% 11%;
-    --secondary: 228 10% 15%;
-    --secondary-foreground: 225 18% 95%;
-    --muted: 228 10% 15%;
-    --muted-foreground: 225 9% 66%;
-    --accent: 228 10% 16%;
-    --accent-foreground: 225 18% 95%;
+    --background: 225 29% 6%;
+    --foreground: 225 24% 96%;
+    --card: 225 24% 9%;
+    --card-foreground: 225 24% 96%;
+    --popover: 225 24% 9%;
+    --popover-foreground: 225 24% 96%;
+    --primary: 250 92% 72%;
+    --primary-foreground: 232 38% 11%;
+    --secondary: 225 19% 15%;
+    --secondary-foreground: 225 24% 96%;
+    --muted: 225 17% 14%;
+    --muted-foreground: 222 12% 68%;
+    --accent: 225 18% 17%;
+    --accent-foreground: 225 24% 96%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
-    --border: 228 9% 21%;
-    --input: 228 9% 21%;
-    --ring: 231 92% 70%;
-    --radius: 0.875rem;
+    --border: 225 17% 20%;
+    --input: 225 17% 20%;
+    --ring: 250 92% 72%;
+    --radius: 1rem;
   }
 
   .dark {
@@ -40,8 +40,9 @@
     @apply bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 0 1;
     font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
-    background-image: radial-gradient(ellipse at 50% -28%, hsl(var(--primary) / 0.055), transparent 56%);
-    background-attachment: fixed;
+    background-image: radial-gradient(ellipse at 50% -28%, hsl(var(--primary) / 0.075), transparent 56%);
+    background-repeat: no-repeat;
+    background-size: 100% 560px;
   }
 
   ::selection {

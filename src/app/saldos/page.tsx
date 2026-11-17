@@ -569,7 +569,7 @@ export default function SaldosPage() {
                         ) : (
                           <Badge
                             variant="outline"
-                            className="text-[10px] border-yellow-500/30 text-yellow-400"
+                            className="text-[10px] border-violet-400/30 text-violet-200"
                           >
                             <Clock size={10} className="mr-1" />
                             A pagar
@@ -598,7 +598,7 @@ export default function SaldosPage() {
                   {j.pago ? (
                     <Badge className="shrink-0 bg-primary/15 text-primary border-primary/30"><CheckCircle2 size={12} className="mr-1" />Pago</Badge>
                   ) : j.valor_dia > 0 ? (
-                    <Badge variant="outline" className="shrink-0 border-yellow-500/30 text-yellow-400"><Clock size={12} className="mr-1" />A pagar</Badge>
+                    <Badge variant="outline" className="shrink-0 border-violet-400/30 text-violet-200"><Clock size={12} className="mr-1" />A pagar</Badge>
                   ) : <Badge variant="outline" className="shrink-0">Pendente</Badge>}
                 </div>
                 <div className="mt-4 grid grid-cols-2 gap-3 text-xs">

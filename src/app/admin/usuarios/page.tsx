@@ -60,12 +60,12 @@ function formatDate(iso: string) {
 const estiloRole: Record<string, { label: string; className: string; icone: typeof Crown }> = {
   admin: {
     label: "Admin Master",
-    className: "border-yellow-400/40 bg-yellow-400/10 text-yellow-300",
+    className: "border-violet-300/35 bg-violet-300/10 text-violet-200",
     icone: Crown,
   },
   moderador: {
     label: "Co-Admin",
-    className: "border-sky-400/40 bg-sky-400/10 text-sky-300",
+    className: "border-cyan-400/35 bg-cyan-400/10 text-cyan-200",
     icone: ShieldCheck,
   },
   user: {
@@ -315,10 +315,10 @@ export default function UsuariosAdminPage() {
           <Badge variant="outline" className="border-border/60 gap-1.5 px-3 py-1">
             <Users size={12} /> {users.length} usuários
           </Badge>
-          <Badge variant="outline" className="border-yellow-400/40 gap-1.5 px-3 py-1 text-yellow-300">
+          <Badge variant="outline" className="border-violet-300/35 gap-1.5 px-3 py-1 text-violet-200">
             <Crown size={12} /> {totalAdmins} admins
           </Badge>
-          <Badge variant="outline" className="border-sky-400/40 gap-1.5 px-3 py-1 text-sky-300">
+          <Badge variant="outline" className="border-cyan-400/35 gap-1.5 px-3 py-1 text-cyan-200">
             <ShieldCheck size={12} /> {totalModeradores} co-admins
           </Badge>
         </div>
@@ -417,7 +417,7 @@ export default function UsuariosAdminPage() {
                                   disabled={souEu}
                                   onClick={() => zerar(u)}
                                   title="Zerar horas e saldos"
-                                  className="h-8 gap-1.5 border-orange-500/30 px-2.5 text-[11px] text-orange-400 hover:bg-orange-500/10 hover:text-orange-300"
+                                  className="h-8 gap-1.5 border-violet-300/25 px-2.5 text-[11px] text-violet-200 hover:bg-violet-300/10 hover:text-violet-100"
                                 >
                                   <RotateCcw size={13} />
                                   Zerar
@@ -430,7 +430,7 @@ export default function UsuariosAdminPage() {
                                     disabled={souEu}
                                     onClick={() => togglarRole(u, "admin")}
                                     title={u.role === "admin" ? 'Remover Admin Master' : 'Tornar Admin Master'}
-                                    className="h-8 gap-1.5 border-yellow-400/30 px-2.5 text-[11px] text-yellow-300 hover:bg-yellow-400/10 hover:text-yellow-200"
+                                    className="h-8 gap-1.5 border-violet-300/30 px-2.5 text-[11px] text-violet-200 hover:bg-violet-300/10 hover:text-violet-100"
                                   >
                                     {u.role === "admin" ? (
                                       <>
@@ -453,7 +453,7 @@ export default function UsuariosAdminPage() {
                                     disabled={souEu}
                                     onClick={() => togglarRole(u, "moderador")}
                                     title={u.role === "moderador" ? 'Remover Co-Admin' : 'Tornar Co-Admin'}
-                                    className="h-8 gap-1.5 border-sky-400/30 px-2.5 text-[11px] text-sky-300 hover:bg-sky-400/10 hover:text-sky-200"
+                                    className="h-8 gap-1.5 border-cyan-400/30 px-2.5 text-[11px] text-cyan-200 hover:bg-cyan-400/10 hover:text-cyan-100"
                                   >
                                     {u.role === "moderador" ? (
                                       <>
@@ -479,7 +479,7 @@ export default function UsuariosAdminPage() {
                                       }
                                     }}
                                     title="Remover cargo e voltar para Jogador"
-                                    className="h-8 gap-1.5 border-purple-500/30 px-2.5 text-[11px] text-purple-300 hover:bg-purple-500/10"
+                                    className="h-8 gap-1.5 border-border/70 px-2.5 text-[11px] text-muted-foreground hover:bg-white/5 hover:text-foreground"
                                   >
                                     Remover cargo
                                   </Button>

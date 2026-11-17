@@ -227,7 +227,7 @@ export default function DashboardPage() {
 
           {isAdmin && (
             <>
-              <Button onClick={pausarTodos} disabled={loading} variant="outline" className="h-11 px-2 text-xs border-orange-500/40 text-orange-400 hover:bg-orange-500/10 sm:h-12 sm:px-4 sm:text-sm">
+              <Button onClick={pausarTodos} disabled={loading} variant="outline" className="h-11 px-2 text-xs border-violet-400/35 text-violet-200 hover:bg-violet-400/10 sm:h-12 sm:px-4 sm:text-sm">
                 <Pause size={18} className="mr-2" /> Pausar Todos
               </Button>
               <Button onClick={despausarTodos} disabled={loading} variant="outline" className="h-11 px-2 text-xs border-primary/40 text-primary hover:bg-primary/10 sm:h-12 sm:px-4 sm:text-sm">
@@ -315,13 +315,13 @@ export default function DashboardPage() {
       {isAdmin && (
         <div className="grid sm:grid-cols-2 gap-4">
           <Card
-            className="border-orange-500/20 hover:border-orange-500/40 cursor-pointer transition-all hover:bg-orange-500/5"
+            className="border-violet-400/20 hover:border-violet-400/40 cursor-pointer transition-all hover:bg-violet-400/5"
             onClick={() => router.push("/penalidades")}
           >
             <CardContent className="pt-4 pb-4">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-orange-500/20 flex items-center justify-center">
-                  <AlertTriangle size={18} className="text-orange-400" />
+                <div className="w-10 h-10 rounded-lg bg-violet-400/15 flex items-center justify-center">
+                  <AlertTriangle size={18} className="text-violet-200" />
                 </div>
                 <div>
                   <p className="font-semibold text-sm">Penalidades</p>
