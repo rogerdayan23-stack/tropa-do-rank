@@ -17,6 +17,7 @@ import {
   ChevronRight,
   UserCog,
   Crown,
+  FileClock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -40,10 +41,11 @@ const adminItems = [
   { label: "Saldos", href: "/saldos", icon: DollarSign },
 ];
 
-const adminPanelItems = [
+const adminMasterItems = [
   { label: "Gerenciar Usuários", href: "/admin/usuarios", icon: UserCog },
-  { label: "Monitoramento", href: "/admin/monitoramento", icon: Clock },
+  { label: "Registros", href: "/admin/registros", icon: FileClock },
 ];
+const monitorItem = { label: "Monitoramento", href: "/admin/monitoramento", icon: Clock };
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -142,16 +144,15 @@ export function Sidebar() {
           <NavLink key={item.href} {...item} />
         ))}
 
-        {user?.role === "admin" && (
+        {(user?.role === "admin" || user?.role === "moderador") && (
           <>
             <div className="pt-4 pb-1">
               <p className="text-xs font-semibold text-muted-foreground/60 uppercase tracking-wider px-3 mb-2">
                 Admin
               </p>
             </div>
-            {adminPanelItems.map((item) => (
-              <NavLink key={item.href} {...item} />
-            ))}
+            {user.role === "admin" && adminMasterItems.map((item) => <NavLink key={item.href} {...item} />)}
+            <NavLink {...monitorItem} />
           </>
         )}
       </nav>
@@ -226,3 +227,4 @@ export function Sidebar() {
     </>
   );
 }
+
