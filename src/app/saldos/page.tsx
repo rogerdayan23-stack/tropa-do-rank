@@ -299,7 +299,7 @@ export default function SaldosPage() {
 
       {/* 1. SEÇÃO DE DESTAQUE: RESUMO SEMANAL */}
       {resumo && (
-        <Card className="border-2 border-primary/50 bg-primary/[0.03] shadow-[0_0_25px_rgba(34,197,94,0.08)]">
+        <Card className="border-2 border-primary/35 bg-primary/[0.025] shadow-[0_0_25px_rgba(99,102,241,0.08)]">
           <CardHeader className="pb-3">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div>
@@ -543,7 +543,7 @@ export default function SaldosPage() {
                     <td className="px-4 py-3.5 text-center">
                       {j.pago ? (
                         <div className="flex flex-col items-center gap-0.5">
-                          <Badge className="bg-green-500/20 text-green-400 border-green-500/30 text-xs font-semibold">
+                          <Badge className="bg-primary/15 text-primary border-primary/30 text-xs font-semibold">
                             <CheckCircle2 size={11} className="mr-1" />
                             Pago
                           </Badge>
@@ -596,7 +596,7 @@ export default function SaldosPage() {
                     </div>
                   </div>
                   {j.pago ? (
-                    <Badge className="shrink-0 bg-green-500/20 text-green-400 border-green-500/30"><CheckCircle2 size={12} className="mr-1" />Pago</Badge>
+                    <Badge className="shrink-0 bg-primary/15 text-primary border-primary/30"><CheckCircle2 size={12} className="mr-1" />Pago</Badge>
                   ) : j.valor_dia > 0 ? (
                     <Badge variant="outline" className="shrink-0 border-yellow-500/30 text-yellow-400"><Clock size={12} className="mr-1" />A pagar</Badge>
                   ) : <Badge variant="outline" className="shrink-0">Pendente</Badge>}

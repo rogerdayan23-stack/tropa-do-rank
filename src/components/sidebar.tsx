@@ -100,13 +100,13 @@ export function Sidebar() {
         className={cn(
           "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150",
           isActive
-            ? "bg-primary text-black font-semibold"
+            ? "bg-primary text-primary-foreground font-semibold shadow-sm shadow-primary/15"
             : "text-muted-foreground hover:text-foreground hover:bg-white/5"
         )}
       >
-        <Icon size={18} className={isActive ? "text-black" : ""} />
+        <Icon size={18} className={isActive ? "text-primary-foreground" : ""} />
         <span>{label}</span>
-        {isActive && <ChevronRight size={14} className="ml-auto text-black/60" />}
+        {isActive && <ChevronRight size={14} className="ml-auto text-primary-foreground/70" />}
       </Link>
     );
   };
@@ -115,7 +115,7 @@ export function Sidebar() {
     <div className="flex flex-col h-full">
       {/* Logo */}
       <div className="flex items-center gap-3 px-4 py-5 border-b border-border/40">
-        <div className="relative flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border border-yellow-400/35 bg-gradient-to-br from-emerald-500/20 to-yellow-400/10 shadow-[0_0_18px_rgba(234,179,8,0.12)]">
+        <div className="relative flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border border-yellow-400/35 bg-gradient-to-br from-indigo-500/20 to-blue-500/10 shadow-[0_0_18px_rgba(99,102,241,0.12)]">
           <Crown size={21} strokeWidth={2.2} className="text-yellow-300" />
         </div>
         <div className="min-w-0">

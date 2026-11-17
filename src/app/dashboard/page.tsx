@@ -230,7 +230,7 @@ export default function DashboardPage() {
               <Button onClick={pausarTodos} disabled={loading} variant="outline" className="h-11 px-2 text-xs border-orange-500/40 text-orange-400 hover:bg-orange-500/10 sm:h-12 sm:px-4 sm:text-sm">
                 <Pause size={18} className="mr-2" /> Pausar Todos
               </Button>
-              <Button onClick={despausarTodos} disabled={loading} variant="outline" className="h-11 px-2 text-xs border-green-500/40 text-green-400 hover:bg-green-500/10 sm:h-12 sm:px-4 sm:text-sm">
+              <Button onClick={despausarTodos} disabled={loading} variant="outline" className="h-11 px-2 text-xs border-primary/40 text-primary hover:bg-primary/10 sm:h-12 sm:px-4 sm:text-sm">
                 <Play size={18} className="mr-2" /> Despausar Todos
               </Button>
               <Button onClick={contagem} disabled={loading} variant="outline" className="h-11 px-2 text-xs border-primary/40 text-primary hover:bg-primary/10 sm:h-12 sm:px-4 sm:text-sm">

@@ -211,8 +211,8 @@ export default function RankingPage() {
 
         <div className="flex items-center gap-2 self-start sm:self-auto rounded-full border border-border/60 bg-card/60 px-3 py-1.5">
           <span className="relative flex h-2 w-2">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
-            <span className="relative inline-flex h-2 w-2 rounded-full bg-green-500" />
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-50" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
           </span>
           <span className="text-xs font-medium text-muted-foreground">Atualizando em tempo real</span>
         </div>
@@ -378,7 +378,7 @@ export default function RankingPage() {
                       <td className="px-5 py-3.5">
                         <div className="h-2 w-full max-w-[220px] overflow-hidden rounded-full bg-white/5">
                           <div
-                            className="h-full rounded-full bg-gradient-to-r from-green-500 to-emerald-400 transition-all duration-700 ease-out"
+                            className="h-full rounded-full bg-gradient-to-r from-indigo-400 to-blue-500 transition-all duration-700 ease-out"
                             style={{ width: `${progresso}%` }}
                           />
                         </div>
@@ -415,7 +415,7 @@ export default function RankingPage() {
                   </div>
                   <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/5">
                     <div
-                      className="h-full rounded-full bg-gradient-to-r from-green-500 to-emerald-400 transition-all duration-700 ease-out"
+                      className="h-full rounded-full bg-gradient-to-r from-indigo-400 to-blue-500 transition-all duration-700 ease-out"
                       style={{ width: `${progresso}%` }}
                     />
                   </div>

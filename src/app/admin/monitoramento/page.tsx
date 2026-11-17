@@ -146,7 +146,7 @@ export default function AdminMasterMonitor() {
   function getStatusBadgeClass(status: string) {
     switch (status) {
       case "ativa":
-        return "border-green-500/30 bg-green-500/10 text-green-300";
+        return "border-primary/30 bg-primary/10 text-primary";
       case "pausada":
         return "border-yellow-500/30 bg-yellow-500/10 text-yellow-300";
       case "encerrada":
@@ -159,7 +159,7 @@ export default function AdminMasterMonitor() {
   function getStatusIcon(status: string) {
     switch (status) {
       case "ativa":
-        return <Play size={12} className="text-green-400" />;
+        return <Play size={12} className="text-primary" />;
       case "pausada":
         return <Pause size={12} className="text-yellow-400" />;
       case "encerrada":
