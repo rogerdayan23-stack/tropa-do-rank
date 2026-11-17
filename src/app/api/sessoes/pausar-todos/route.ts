@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { getUserFromRequest, isAdminRole } from "@/lib/auth";
 import { STATUS_ATIVA, STATUS_PAUSADA, calcularDuracaoSessao, logContagemSessao } from "@/lib/sessao";
+import { registrarAuditoria } from "@/lib/audit";
 
 export async function POST(req: NextRequest) {
   const user = await getUserFromRequest();
@@ -36,13 +37,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    await service.from("logs").insert({
-      user_id: user.id,
-      acao: "pausar_todos",
-      detalhe: `${count} sessões pausadas pelo admin`,
-      admin_id: user.id,
-      criado_em: agora,
-    });
+    await registrarAuditoria(service, user, "admin:pausar_todos", `${count} sessões pausadas pelo Admin Master.`);
 
     return NextResponse.json({ ok: true, count });
   }
@@ -69,16 +64,11 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    await service.from("logs").insert({
-      user_id: user.id,
-      acao: "despausar_todos",
-      detalhe: `${count} sessões retomadas pelo admin`,
-      admin_id: user.id,
-      criado_em: agora,
-    });
+    await registrarAuditoria(service, user, "admin:despausar_todos", `${count} sessões retomadas pelo Admin Master.`);
 
     return NextResponse.json({ ok: true, count });
   }
 
   return NextResponse.json({ error: "Ação inválida" }, { status: 400 });
 }
+
