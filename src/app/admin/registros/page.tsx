@@ -129,7 +129,7 @@ export default function RegistrosAdminPage() {
             <FileClock size={22} />
           </div>
           <div>
-            <p className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-violet-200/80">Admin Master</p>
+            <p className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-violet-200/80">Administração</p>
             <h1 className="text-2xl font-black tracking-tight sm:text-3xl">Registros de auditoria</h1>
             <p className="mt-1 max-w-2xl text-sm text-muted-foreground">Histórico das alterações e operações administrativas feitas no site.</p>
           </div>

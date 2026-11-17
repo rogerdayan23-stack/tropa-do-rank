@@ -43,9 +43,11 @@ const adminItems = [
 
 const adminMasterItems = [
   { label: "Gerenciar Usuários", href: "/admin/usuarios", icon: UserCog },
-  { label: "Registros", href: "/admin/registros", icon: FileClock },
 ];
-const monitorItem = { label: "Monitoramento", href: "/admin/monitoramento", icon: Clock };
+const adminSharedItems = [
+  { label: "Registros", href: "/admin/registros", icon: FileClock },
+  { label: "Monitoramento", href: "/admin/monitoramento", icon: Clock },
+];
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -152,7 +154,7 @@ export function Sidebar() {
               </p>
             </div>
             {user.role === "admin" && adminMasterItems.map((item) => <NavLink key={item.href} {...item} />)}
-            <NavLink {...monitorItem} />
+            {adminSharedItems.map((item) => <NavLink key={item.href} {...item} />)}
           </>
         )}
       </nav>
