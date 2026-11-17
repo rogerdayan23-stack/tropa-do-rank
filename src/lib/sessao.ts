@@ -22,16 +22,24 @@ export interface SessaoRow {
   ultima_atividade: string | null;
 }
 
+function segundosDesdeInicio(inicio: string | null): number {
+  if (!inicio) return 0;
+  const instanteInicio = new Date(inicio).getTime();
+  if (!Number.isFinite(instanteInicio)) return 0;
+  // Relógios do cliente e do servidor podem divergir; uma data futura não
+  // deve transformar o tempo da sessão em um valor negativo.
+  return Math.max(0, Math.floor((Date.now() - instanteInicio) / 1000));
+}
+
 /**
  * Calcula o total de segundos contabilizados para uma sessão.
  * - Se estiver ativa, soma o tempo decorrido desde `inicio` até agora.
  * - Se estiver pausada/encerrada, usa apenas `segundos_acumulados`.
  */
 export function calcularDuracaoSessao(s: SessaoRow): number {
-  const acumulado = s.segundos_acumulados || 0;
+  const acumulado = Math.max(0, Math.floor(Number(s.segundos_acumulados) || 0));
   if (s.status === STATUS_ATIVA && s.inicio) {
-    const decorrido = Math.floor((Date.now() - new Date(s.inicio).getTime()) / 1000);
-    return acumulado + decorrido;
+    return acumulado + segundosDesdeInicio(s.inicio);
   }
   return acumulado;
 }
@@ -55,17 +63,13 @@ export function construirAtualizacaoSessao(s: SessaoRow, agora: string): {
   update: Record<string, unknown>;
   expirou: boolean;
 } {
-  const acumulado = (s.segundos_acumulados || 0);
-  let novosAcumulados = acumulado;
+  const acumulado = Math.max(0, Math.floor(Number(s.segundos_acumulados) || 0));
+  let novosAcumulados = calcularDuracaoSessao(s);
   let expirou = false;
 
-  if (s.status === STATUS_ATIVA && s.inicio) {
-    const decorrido = Math.floor((Date.now() - new Date(s.inicio).getTime()) / 1000);
-    novosAcumulados = acumulado + decorrido;
-    if (novosAcumulados >= LIMITE_SESSAO_SEGUNDOS) {
-      expirou = true;
-      novosAcumulados = Math.min(novosAcumulados, LIMITE_SESSAO_SEGUNDOS);
-    }
+  if (s.status === STATUS_ATIVA && novosAcumulados >= LIMITE_SESSAO_SEGUNDOS) {
+    expirou = true;
+    novosAcumulados = Math.min(novosAcumulados, LIMITE_SESSAO_SEGUNDOS);
   }
 
   const update: Record<string, unknown> = { ultima_atividade: agora };
@@ -86,3 +90,4 @@ export function construirAtualizacaoSessao(s: SessaoRow, agora: string): {
 export function logContagemSessao(sessaoId: string, segundos: number, contexto = "contagem") {
   console.log(`[FARM] Sessão ${sessaoId} ${contexto}: ${segundos} segundos acumulados`);
 }
+
