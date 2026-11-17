@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase";
 import { createServiceClient } from "@/lib/supabase";
 import { getUserFromRequest, isAdminRole } from "@/lib/auth";
+import { registrarAuditoria } from "@/lib/audit";
 
 export async function GET() {
   const user = await getUserFromRequest();
@@ -23,7 +24,8 @@ export async function PUT(req: NextRequest) {
   const agora = new Date().toISOString();
   const service = createServiceClient();
 
-  const { data: existente } = await service.from("regras").select("id").limit(1).single();
+  const { data: existente, error: consultaError } = await service.from("regras").select("id, texto").limit(1).maybeSingle();
+  if (consultaError) return NextResponse.json({ error: consultaError.message }, { status: 500 });
 
   let result;
   if (existente) {
@@ -34,5 +36,8 @@ export async function PUT(req: NextRequest) {
 
   if (result.error) return NextResponse.json({ error: result.error.message }, { status: 500 });
 
+  await registrarAuditoria(service, user, "admin:editar_regras", `Regras alteradas. Conteúdo anterior: ${existente?.texto || "(vazio)"} | Novo conteúdo: ${String(texto || "")}`);
+
   return NextResponse.json({ ok: true });
 }
+
