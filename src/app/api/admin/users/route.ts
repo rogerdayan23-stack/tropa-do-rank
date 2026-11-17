@@ -125,7 +125,9 @@ export async function PATCH(req: NextRequest) {
       if (updateError) throw updateError;
 
       const sinal = operation === "add" ? "+" : "−";
-      const detalhe = `${alvo.username}: ${sinal}${hours}h${String(minutes).padStart(2, "0")}m (${totalAnterior}s → ${totalNovo}s)`;
+      const ajusteSemanal = operation === "add" ? segundosAjuste : -segundosAjuste;
+      const marcadorSemanal = `${ajusteSemanal > 0 ? "+" : ""}${ajusteSemanal}s`;
+      const detalhe = `${alvo.username}: ${sinal}${hours}h${String(minutes).padStart(2, "0")}m (${totalAnterior}s → ${totalNovo}s) [ajuste-semanal:${marcadorSemanal}]`;
       await registrarLog(supabase, admin.id, "admin_adjust_user_hours", detalhe, user_id);
 
       return NextResponse.json({
@@ -282,3 +284,4 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: "Erro interno ao remover usuário" }, { status: 500 });
   }
 }
+
