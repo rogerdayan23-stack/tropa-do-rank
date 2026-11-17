@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { getUserFromRequest } from "@/lib/auth";
+import { STATUS_ATIVA, type SessaoRow } from "@/lib/sessao";
+import { expirarSessoesVencidas } from "@/lib/sessao-server";
 
 export async function POST() {
   const user = await getUserFromRequest();
@@ -26,7 +28,7 @@ export async function POST() {
   }
 
   // 2. Verifica se já existe sessão ativa ou pausada
-  const { data: existente, error: listError } = await service
+  const consultarExistente = () => service
     .from("sessoes")
     .select("*")
     .eq("user_id", user.id)
@@ -35,8 +37,24 @@ export async function POST() {
     .limit(1)
     .maybeSingle();
 
+  let { data: existente, error: listError } = await consultarExistente();
+
   if (listError) {
     return NextResponse.json({ error: listError.message }, { status: 500 });
+  }
+
+  if (existente?.status === STATUS_ATIVA) {
+    try {
+      const expiradas = await expirarSessoesVencidas(service, [existente as SessaoRow], agora);
+      if (expiradas > 0) {
+        const atualizada = await consultarExistente();
+        if (atualizada.error) return NextResponse.json({ error: atualizada.error.message }, { status: 500 });
+        existente = atualizada.data;
+      }
+    } catch (expireError) {
+      const message = expireError instanceof Error ? expireError.message : "Falha ao encerrar sessão vencida";
+      return NextResponse.json({ error: message }, { status: 500 });
+    }
   }
 
   let sessao: any;

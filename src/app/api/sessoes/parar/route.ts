@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { getUserFromRequest } from "@/lib/auth";
+import { STATUS_ATIVA, construirAtualizacaoSessao, logContagemSessao } from "@/lib/sessao";
 
 export async function POST(req: NextRequest) {
   const user = await getUserFromRequest();
@@ -26,7 +27,7 @@ export async function POST(req: NextRequest) {
   }
 
   let acumulado = sessao.segundos_acumulados || 0;
-  if (sessao.status === "ativa" && sessao.inicio) {
+  if (sessao.status === STATUS_ATIVA && sessao.inicio) {
     acumulado += Math.floor((Date.now() - new Date(sessao.inicio).getTime()) / 1000);
   }
 
@@ -48,6 +49,8 @@ export async function POST(req: NextRequest) {
     admin_id: null,
     criado_em: agora,
   });
+
+  logContagemSessao(id, acumulado, "encerrada-manual");
 
   return NextResponse.json({ ok: true, total_segundos: acumulado });
 }

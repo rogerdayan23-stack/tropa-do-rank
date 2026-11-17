@@ -13,7 +13,7 @@ create table if not exists users (
   id uuid default gen_random_uuid() primary key,
   username text unique not null,
   apelido text unique not null,
-  role text default 'user',
+  role text default 'user' constraint users_role_check check (role in ('user','moderador','admin')),
   is_admin boolean default false,
   avatar_url text,
   session_token text,

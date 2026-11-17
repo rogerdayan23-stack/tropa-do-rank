@@ -7,8 +7,9 @@ import { Sidebar } from "@/components/sidebar";
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
 export const metadata: Metadata = {
-  title: "Rank Farm",
-  description: "Sistema de controle de farm de rank",
+  title: "Rank dos Cuiudos",
+  description: "Acompanhe o ranking, as sessões de farm e os saldos da tropa.",
+  icons: { icon: "/rank-cuiudos.svg" },
 };
 
 export default function RootLayout({

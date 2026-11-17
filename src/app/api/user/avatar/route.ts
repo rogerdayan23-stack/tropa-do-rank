@@ -3,11 +3,8 @@ import { getUserFromRequest } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase";
 import { v2 as cloudinary } from "cloudinary";
 
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
+const MAX_TAMANHO = 5 * 1024 * 1024;
+const TIPOS_PERMITIDOS = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 
 export async function POST(req: NextRequest) {
   try {
@@ -16,23 +13,51 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
     }
 
+    // 1) Valida as credenciais do Cloudinary antes de tentar o upload
+    const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+    const apiKey = process.env.CLOUDINARY_API_KEY;
+    const apiSecret = process.env.CLOUDINARY_API_SECRET;
+
+    if (!cloudName || !apiKey || !apiSecret) {
+      console.error("[AVATAR] Credenciais do Cloudinary ausentes:", {
+        CLOUDINARY_CLOUD_NAME: !!cloudName,
+        CLOUDINARY_API_KEY: !!apiKey,
+        CLOUDINARY_API_SECRET: !!apiSecret,
+      });
+      return NextResponse.json(
+        {
+          error:
+            "Cloudinary não configurado. Verifique CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY e CLOUDINARY_API_SECRET no .env.local",
+        },
+        { status: 500 }
+      );
+    }
+
+    cloudinary.config({
+      cloud_name: cloudName,
+      api_key: apiKey,
+      api_secret: apiSecret,
+      secure: true,
+    });
+
+    // 2) Extrai o arquivo do FormData
     const formData = await req.formData();
     const file = (formData.get("file") || formData.get("avatar")) as File | null;
 
-    if (!file) {
+    if (!file || typeof file === "string") {
+      console.error("[AVATAR] Campo 'file' ausente no FormData. Campos recebidos:", Array.from(formData.keys()));
       return NextResponse.json({ error: "Nenhum arquivo enviado" }, { status: 400 });
     }
 
     const mimeType = file.type;
-    const allowedTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
-    if (!allowedTypes.includes(mimeType)) {
+    if (!TIPOS_PERMITIDOS.includes(mimeType)) {
       return NextResponse.json(
         { error: "Formato inválido. Envie uma imagem (JPG, PNG, WebP ou GIF)" },
         { status: 400 }
       );
     }
 
-    if (file.size > 5 * 1024 * 1024) {
+    if (file.size > MAX_TAMANHO) {
       return NextResponse.json(
         { error: "Arquivo muito grande. O limite máximo é de 5MB." },
         { status: 400 }
@@ -42,6 +67,7 @@ export async function POST(req: NextRequest) {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
+    // 3) Envia para o Cloudinary
     const uploadResult = await new Promise<any>((resolve, reject) => {
       cloudinary.uploader
         .upload_stream(
@@ -61,6 +87,7 @@ export async function POST(req: NextRequest) {
 
     const avatarUrl = uploadResult.secure_url;
 
+    // 4) Persiste a URL no usuário
     const supabase = createServiceClient();
     const { error: updateError } = await supabase
       .from("users")
@@ -68,6 +95,7 @@ export async function POST(req: NextRequest) {
       .eq("id", user.id);
 
     if (updateError) {
+      console.error("[AVATAR] Erro ao salvar avatar_url no Supabase:", updateError);
       return NextResponse.json({ error: updateError.message }, { status: 500 });
     }
 
@@ -77,10 +105,31 @@ export async function POST(req: NextRequest) {
       avatar_url: avatarUrl,
     });
   } catch (error: any) {
-    console.error("Erro no upload de avatar:", error);
-    return NextResponse.json(
-      { error: "Erro interno ao processar upload" },
-      { status: 500 }
-    );
+    // Log detalhado para o terminal
+    console.error("[AVATAR] Erro no upload de avatar:", {
+      name: error?.name,
+      message: error?.message,
+      http_code: error?.http_code,
+      cloudinary_error: error?.error,
+      cause: error?.cause,
+      stack: error?.stack,
+    });
+    console.error(error);
+
+    // Retorna a mensagem real do Cloudinary (ex.: "api_secret mismatch") para o frontend
+    let mensagem = error?.error?.message || error?.message || "Erro interno ao processar upload";
+
+    // Falha de autenticação do Cloudinary = credencial errada no .env.local
+    if (error?.http_code === 401 || /signature|api_secret|api_key/i.test(mensagem)) {
+      console.error(
+        "[AVATAR] Cloudinary rejeitou as credenciais (HTTP 401). " +
+          "Confira CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY e CLOUDINARY_API_SECRET no .env.local " +
+          "(Cloudinary > Settings > API Keys)."
+      );
+      mensagem =
+        "Cloudinary rejeitou as credenciais. Confira CLOUDINARY_API_SECRET no .env.local (Cloudinary > Settings > API Keys).";
+    }
+
+    return NextResponse.json({ error: mensagem }, { status: 500 });
   }
 }

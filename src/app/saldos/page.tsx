@@ -117,7 +117,7 @@ export default function SaldosPage() {
     try {
       const res = await fetch("/api/auth/me");
       const data = await res.json();
-      setIsAdmin(data.user?.is_admin === true || data.user?.role === "admin");
+      setIsAdmin(data.user?.role === "admin" || data.user?.role === "moderador");
       setLoading(false);
     } catch {
       setLoading(false);
@@ -382,8 +382,8 @@ export default function SaldosPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-wrap gap-4 items-end">
-            <div className="space-y-2">
+          <div className="grid grid-cols-1 gap-4 sm:flex sm:flex-wrap sm:items-end">
+            <div className="space-y-2 w-full sm:w-auto">
               <Label className="text-xs text-muted-foreground">Data do Farm</Label>
               <div className="relative">
                 <CalendarDays size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -391,12 +391,12 @@ export default function SaldosPage() {
                   type="date"
                   value={dataSel}
                   onChange={(e) => setDataSel(e.target.value)}
-                  className="pl-9 bg-background border-border/60 w-44"
+                  className="pl-9 bg-background border-border/60 w-full sm:w-44"
                 />
               </div>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-2 w-full sm:w-auto">
               <Label className="text-xs text-muted-foreground">Lucro Total do Dia (R$)</Label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-semibold">
@@ -409,7 +409,7 @@ export default function SaldosPage() {
                   value={valorLucroInput}
                   onChange={(e) => setValorLucroInput(e.target.value)}
                   placeholder="0,00"
-                  className="pl-9 bg-background border-border/60 w-44 font-mono"
+                  className="pl-9 bg-background border-border/60 w-full sm:w-44 font-mono"
                 />
               </div>
             </div>
@@ -418,7 +418,7 @@ export default function SaldosPage() {
               <Button
                 onClick={salvarLucro}
                 disabled={salvandoLucro || !valorLucroInput}
-                className="bg-primary text-black font-semibold hover:bg-primary/90"
+                className="w-full sm:w-auto bg-primary text-black font-semibold hover:bg-primary/90"
               >
                 {salvandoLucro ? <Loader2 size={14} className="animate-spin mr-2" /> : null}
                 Salvar / Calcular Lucro do Dia
@@ -426,7 +426,7 @@ export default function SaldosPage() {
             )}
 
             {/* Taxa/Hora do Dia em destaque */}
-            <div className="ml-auto flex items-center gap-3 bg-muted/30 px-4 py-2 rounded-lg border border-border/40">
+            <div className="w-full sm:ml-auto sm:w-auto flex items-center justify-between sm:justify-start gap-3 bg-muted/30 px-4 py-3 sm:py-2 rounded-lg border border-border/40">
               <div className="text-right">
                 <p className="text-xs text-muted-foreground">Horas do Dia (Time):</p>
                 <p className="font-bold text-sm">
@@ -449,8 +449,8 @@ export default function SaldosPage() {
       {/* 3. TABELA: DIVISÃO POR JOGADOR (SEMPRE VISÍVEL) */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
               <CardTitle className="text-base flex items-center gap-2">
                 <Users size={18} className="text-primary" />
                 Divisão por Jogador
@@ -465,7 +465,7 @@ export default function SaldosPage() {
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border/60 bg-muted/20">
@@ -583,6 +583,43 @@ export default function SaldosPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+          <div className="space-y-3 p-3 md:hidden">
+            {dadosCalculadosEmTempoReal.jogadores.map((j) => (
+              <article key={j.id} className="rounded-xl border border-border/60 bg-white/[0.025] p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <Avatar url={j.avatar_url} nome={j.username} />
+                    <div className="min-w-0">
+                      <p className="truncate font-semibold">{j.username}</p>
+                      <p className="text-xs text-muted-foreground">{j.horas_semana > 0 ? "Farming ativo" : "Sem sessões"}</p>
+                    </div>
+                  </div>
+                  {j.pago ? (
+                    <Badge className="shrink-0 bg-green-500/20 text-green-400 border-green-500/30"><CheckCircle2 size={12} className="mr-1" />Pago</Badge>
+                  ) : j.valor_dia > 0 ? (
+                    <Badge variant="outline" className="shrink-0 border-yellow-500/30 text-yellow-400"><Clock size={12} className="mr-1" />A pagar</Badge>
+                  ) : <Badge variant="outline" className="shrink-0">Pendente</Badge>}
+                </div>
+                <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
+                  <div className="rounded-lg bg-black/20 p-2.5"><p className="text-muted-foreground">Horas hoje</p><p className="mt-1 font-mono font-semibold">{formatHoras(j.horas_dia)}</p></div>
+                  <div className="rounded-lg bg-black/20 p-2.5"><p className="text-muted-foreground">Horas semana</p><p className="mt-1 font-mono font-semibold">{formatHoras(j.horas_semana)}</p></div>
+                  <div className="rounded-lg bg-black/20 p-2.5"><p className="text-muted-foreground">Valor do dia</p><p className="mt-1 font-mono">R$ {j.valor_dia.toFixed(2).replace(".", ",")}</p></div>
+                  <div className="rounded-lg bg-black/20 p-2.5"><p className="text-muted-foreground">Penalidades</p><p className={`mt-1 font-mono ${j.penalidades_semana > 0 ? "font-semibold text-red-400" : ""}`}>{j.penalidades_semana > 0 ? `−R$ ${j.penalidades_semana.toFixed(2).replace(".", ",")}` : "—"}</p></div>
+                </div>
+                <div className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-primary/20 bg-primary/[0.06] px-3 py-2.5">
+                  <span className="text-xs text-muted-foreground">Total na semana</span>
+                  <span className="font-mono text-base font-extrabold text-primary">R$ {j.total_receber_semana.toFixed(2).replace(".", ",")}</span>
+                </div>
+                {j.pago_em && j.pago && <p className="mt-2 text-right text-[11px] text-muted-foreground">Pago às {formatPagoEm(j.pago_em)}</p>}
+                {!j.pago && j.valor_dia > 0 && isAdmin && (
+                  <Button onClick={() => confirmarPagamento(j)} disabled={confirmando === j.id} className="mt-3 h-11 w-full bg-primary font-semibold text-black hover:bg-primary/90">
+                    {confirmando === j.id ? <Loader2 size={14} className="mr-2 animate-spin" /> : <CheckCircle2 size={14} className="mr-2" />}
+                    Confirmar pagamento
+                  </Button>
+                )}
+              </article>
+            ))}
           </div>
         </CardContent>
       </Card>

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getUserFromRequest, isAdminUser } from "@/lib/auth";
+import { getUserFromRequest, isManager } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase";
 import crypto from "crypto";
 
@@ -233,7 +233,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const user = await getUserFromRequest();
-  if (!user || !isAdminUser(user)) {
+  if (!user || !isManager(user)) {
     return NextResponse.json({ error: "Acesso negado" }, { status: 403 });
   }
 
