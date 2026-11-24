@@ -24,6 +24,15 @@ function inicioPeriodo(tipo: Exclude<Periodo, "geral">, agora: Date) {
   return inicio;
 }
 
+function somarHorasDiasUteis(dias: Map<string, number>) {
+  let total = 0;
+  dias.forEach((segundos, data) => {
+    const diaSemana = new Date(`${data}T00:00:00.000Z`).getUTCDay();
+    if (diaSemana >= 1 && diaSemana <= 5) total += segundos;
+  });
+  return total;
+}
+
 function acumularEventos(eventos: Evento[], ate: number, desde: number) {
   const eventosPorJogador = new Map<string, Evento[]>();
   for (const evento of eventos) {
@@ -136,8 +145,10 @@ export async function GET(req: NextRequest) {
     const diasPeriodo = dePeriodo?.get(jogador.id) || new Map<string, number>();
     const totalSelecionado = tipo === "geral"
       ? Number(jogador.total_segundos || 0)
-      : Array.from(diasPeriodo.values()).reduce((total, segundos) => total + segundos, 0);
-    const horasMeta = Array.from(diasSemana.values()).reduce((total, segundos) => total + segundos, 0);
+      : tipo === "semana"
+        ? somarHorasDiasUteis(diasPeriodo)
+        : Array.from(diasPeriodo.values()).reduce((total, segundos) => total + segundos, 0);
+    const horasMeta = somarHorasDiasUteis(diasSemana);
     return {
       id: jogador.id,
       apelido: jogador.apelido || jogador.username,

@@ -25,6 +25,11 @@ function colunaSessaoAusente(error: { code?: string; message?: string } | null):
   return (error?.code === "42703" || error?.code === "PGRST204") && /sessao_id/i.test(error.message || "");
 }
 
+function ehDiaUtilUTC(data: string): boolean {
+  const diaSemana = new Date(`${data}T00:00:00.000Z`).getUTCDay();
+  return diaSemana >= 1 && diaSemana <= 5;
+}
+
 function getIntervaloSemana(dataStr: string) {
   const [ano, mes, dia] = dataStr.split("-").map(Number);
   const d = new Date(ano, mes - 1, dia, 12, 0, 0);
@@ -209,6 +214,7 @@ export async function GET(req: NextRequest) {
         if (s.fim && !temFim) eventosComFim.push({ acao: "encerrar_sessao", criado_em: s.fim });
         const porDia = calcularSegundosAtivosPorDia(eventosComFim, inicioSemanaMs, fimSemanaMs);
         for (const [dia, segundos] of Array.from(porDia.entries())) {
+          if (!ehDiaUtilUTC(dia)) continue;
           segundosPorUsuarioPorDia[s.user_id][dia] = (segundosPorUsuarioPorDia[s.user_id][dia] || 0) + segundos;
         }
         continue;
@@ -216,7 +222,7 @@ export async function GET(req: NextRequest) {
 
       // Compatibilidade com sessões antigas sem eventos vinculados.
       const diaSessao = (s.inicio || "").substring(0, 10);
-      if (!diaSessao || diaSessao < semana.inicioStr || diaSessao > semana.fimStr) continue;
+      if (!diaSessao || !ehDiaUtilUTC(diaSessao) || diaSessao < semana.inicioStr || diaSessao > semana.fimStr) continue;
       const segundosDaSessao = Math.max(0, calcularDuracaoSessao(s as SessaoRow));
       segundosPorUsuarioPorDia[s.user_id][diaSessao] = (segundosPorUsuarioPorDia[s.user_id][diaSessao] || 0) + segundosDaSessao;
     }
