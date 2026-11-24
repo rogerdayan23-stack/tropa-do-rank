@@ -24,7 +24,7 @@ export async function PUT(req: NextRequest) {
   const agora = new Date().toISOString();
   const service = createServiceClient();
 
-  const { data: existente, error: consultaError } = await service.from("regras").select("id, texto").limit(1).maybeSingle();
+  const { data: existente, error: consultaError } = await service.from("regras").select("id").limit(1).maybeSingle();
   if (consultaError) return NextResponse.json({ error: consultaError.message }, { status: 500 });
 
   let result;
@@ -36,8 +36,7 @@ export async function PUT(req: NextRequest) {
 
   if (result.error) return NextResponse.json({ error: result.error.message }, { status: 500 });
 
-  await registrarAuditoria(service, user, "admin:editar_regras", `Regras alteradas. Conteúdo anterior: ${existente?.texto || "(vazio)"} | Novo conteúdo: ${String(texto || "")}`);
+  await registrarAuditoria(service, user, "admin:editar_regras", "As regras do site foram atualizadas.");
 
   return NextResponse.json({ ok: true });
 }
-

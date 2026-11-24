@@ -51,6 +51,7 @@ create table if not exists regras (
 create table if not exists logs (
   id uuid default gen_random_uuid() primary key,
   user_id uuid references users(id) on delete set null,
+  sessao_id uuid references sessoes(id) on delete set null,
   acao text not null,
   detalhe text,
   admin_id uuid references users(id) on delete set null,
@@ -63,8 +64,8 @@ create table if not exists logs (
 create table if not exists lucros_diarios (
   id uuid default gen_random_uuid() primary key,
   data text unique not null,
-  valor_total real not null default 0,
-  criado_por text,
+  valor_total numeric(12,2) not null default 0,
+  criado_por uuid references users(id) on delete set null,
   created_at timestamptz default now()
 );
 
@@ -73,11 +74,11 @@ create table if not exists lucros_diarios (
 -- ============================================
 create table if not exists pagamentos (
   id uuid default gen_random_uuid() primary key,
-  lucro_diario_id text,
+  lucro_diario_id uuid references lucros_diarios(id) on delete set null,
   data text not null,
-  user_id text not null,
-  horas_farmadas real not null default 0,
-  valor_calculado real not null default 0,
+  user_id uuid not null references users(id) on delete restrict,
+  horas_farmadas numeric(10,2) not null default 0,
+  valor_calculado numeric(12,2) not null default 0,
   pago boolean default false,
   pago_em timestamptz,
   created_at timestamptz default now()
@@ -90,10 +91,11 @@ create table if not exists fechamentos_semanais (
   id uuid default gen_random_uuid() primary key,
   data_inicio text not null,
   data_fim text not null,
-  lucro_total real not null default 0,
-  total_horas real not null default 0,
+  lucro_total numeric(12,2) not null default 0,
+  total_horas numeric(10,2) not null default 0,
   detalhes_json text not null default '[]',
-  fechado_por text not null,
+  fechado_por uuid not null references users(id) on delete restrict,
+  request_id uuid unique,
   created_at timestamptz default now()
 );
 
@@ -102,10 +104,10 @@ create table if not exists fechamentos_semanais (
 -- ============================================
 create table if not exists penalidades (
   id uuid default gen_random_uuid() primary key,
-  user_id text not null,
-  admin_id text not null,
+  user_id uuid not null references users(id) on delete restrict,
+  admin_id uuid not null references users(id) on delete restrict,
   motivo text not null,
-  valor real not null default 0,
+  valor numeric(12,2) not null default 0,
   created_at timestamptz default now()
 );
 
@@ -124,7 +126,69 @@ create index if not exists idx_pagamentos_user_id on pagamentos(user_id);
 create index if not exists idx_penalidades_user_id on penalidades(user_id);
 create index if not exists idx_penalidades_created_at on penalidades(created_at);
 create index if not exists idx_logs_criado_em on logs(criado_em);
+create index if not exists idx_logs_sessao_id on logs(sessao_id);
 create index if not exists idx_fechamentos_semanais_datas on fechamentos_semanais(data_inicio, data_fim);
+
+-- Fecha o ciclo numa única transação e evita duplicar uma solicitação repetida.
+create or replace function fechar_semana_atomico(
+  p_data_inicio text,
+  p_data_fim text,
+  p_lucro_total numeric,
+  p_total_horas numeric,
+  p_detalhes jsonb,
+  p_fechado_por uuid,
+  p_request_id uuid
+) returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_id uuid;
+  v_detalhe text;
+begin
+  if p_request_id is null then
+    raise exception 'Identificador da solicitação é obrigatório';
+  end if;
+
+  perform pg_advisory_xact_lock(hashtext(p_request_id::text)::bigint);
+
+  select id into v_id
+  from fechamentos_semanais
+  where request_id = p_request_id;
+
+  if v_id is not null then
+    return jsonb_build_object('id', v_id, 'repetido', true);
+  end if;
+
+  insert into fechamentos_semanais (
+    data_inicio, data_fim, lucro_total, total_horas, detalhes_json, fechado_por, request_id
+  ) values (
+    p_data_inicio,
+    p_data_fim,
+    round(coalesce(p_lucro_total, 0), 2),
+    round(coalesce(p_total_horas, 0), 2),
+    coalesce(p_detalhes, '[]'::jsonb)::text,
+    p_fechado_por,
+    p_request_id
+  ) returning id into v_id;
+
+  delete from lucros_diarios
+  where data >= p_data_inicio and data <= p_data_fim;
+
+  v_detalhe := format('Semana %s a %s arquivada. Lucro bruto: R$ %s; horas totais: %s.',
+    p_data_inicio, p_data_fim, to_char(coalesce(p_lucro_total, 0), 'FM999999990D00'),
+    to_char(coalesce(p_total_horas, 0), 'FM999999990D00'));
+
+  insert into logs (user_id, admin_id, acao, detalhe, criado_em)
+  values (p_fechado_por, p_fechado_por, 'admin:fechar_semana', v_detalhe, now());
+
+  return jsonb_build_object('id', v_id, 'repetido', false);
+end;
+$$;
+
+revoke all on function fechar_semana_atomico(text, text, numeric, numeric, jsonb, uuid, uuid) from public;
+grant execute on function fechar_semana_atomico(text, text, numeric, numeric, jsonb, uuid, uuid) to service_role;
 
 -- ============================================
 -- Comentários

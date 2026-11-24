@@ -65,7 +65,7 @@ const estiloRole: Record<string, { label: string; className: string; icone: type
   },
   moderador: {
     label: "Co-Admin",
-    className: "border-cyan-400/35 bg-cyan-400/10 text-cyan-200",
+    className: "border-rose-400/35 bg-rose-400/10 text-rose-200",
     icone: ShieldCheck,
   },
   user: {
@@ -94,6 +94,7 @@ export default function UsuariosAdminPage() {
   const [loading, setLoading] = useState(true);
   const [autorizado, setAutorizado] = useState(false);
   const [meId, setMeId] = useState<string | null>(null);
+  const [podeAlterarCargos, setPodeAlterarCargos] = useState(false);
   const [busca, setBusca] = useState("");
   const [processando, setProcessando] = useState<string | null>(null);
   const [usuarioEmEdicao, setUsuarioEmEdicao] = useState<AdminUser | null>(null);
@@ -115,6 +116,7 @@ export default function UsuariosAdminPage() {
         }
 
         setMeId(me.user.id);
+        setPodeAlterarCargos(me.user.username?.trim().toLocaleLowerCase("pt-BR") === "dnz");
         setAutorizado(true);
         await carregar();
       } catch {
@@ -318,7 +320,7 @@ export default function UsuariosAdminPage() {
           <Badge variant="outline" className="border-rose-300/35 gap-1.5 px-3 py-1 text-rose-200">
             <Crown size={12} /> {totalAdmins} admins
           </Badge>
-          <Badge variant="outline" className="border-cyan-400/35 gap-1.5 px-3 py-1 text-cyan-200">
+          <Badge variant="outline" className="border-rose-400/35 gap-1.5 px-3 py-1 text-rose-200">
             <ShieldCheck size={12} /> {totalModeradores} co-admins
           </Badge>
         </div>
@@ -414,7 +416,6 @@ export default function UsuariosAdminPage() {
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  disabled={souEu}
                                   onClick={() => zerar(u)}
                                   title="Zerar horas e saldos"
                                   className="h-8 gap-1.5 border-rose-300/25 px-2.5 text-[11px] text-rose-200 hover:bg-rose-300/10 hover:text-rose-100"
@@ -423,7 +424,7 @@ export default function UsuariosAdminPage() {
                                   Zerar
                                 </Button>
 
-                                {u.id !== meId && (
+                                {podeAlterarCargos && u.id !== meId && (
                                   <Button
                                     size="sm"
                                     variant="outline"
@@ -446,14 +447,14 @@ export default function UsuariosAdminPage() {
                                   </Button>
                                 )}
 
-                                {u.id !== meId && (
+                                {podeAlterarCargos && u.id !== meId && (
                                   <Button
                                     size="sm"
                                     variant="outline"
                                     disabled={souEu}
                                     onClick={() => togglarRole(u, "moderador")}
                                     title={u.role === "moderador" ? 'Remover Co-Admin' : 'Tornar Co-Admin'}
-                                    className="h-8 gap-1.5 border-cyan-400/30 px-2.5 text-[11px] text-cyan-200 hover:bg-cyan-400/10 hover:text-cyan-100"
+                                    className="h-8 gap-1.5 border-rose-400/30 px-2.5 text-[11px] text-rose-200 hover:bg-rose-400/10 hover:text-rose-100"
                                   >
                                     {u.role === "moderador" ? (
                                       <>
@@ -469,7 +470,7 @@ export default function UsuariosAdminPage() {
                                   </Button>
                                 )}
 
-                                {u.id !== meId && (u.role === "admin" || u.role === "moderador") && (
+                                {podeAlterarCargos && u.id !== meId && (u.role === "admin" || u.role === "moderador") && (
                                   <Button
                                     size="sm"
                                     variant="outline"

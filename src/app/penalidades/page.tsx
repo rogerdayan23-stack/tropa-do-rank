@@ -208,8 +208,9 @@ export default function PenalidadesPage() {
         </div>
         {isAdmin && (
           <Button
+            variant="destructive"
             onClick={() => setModalOpen(true)}
-            className="bg-primary text-black font-semibold hover:bg-primary/90"
+            className="font-semibold"
           >
             <Plus size={16} className="mr-2" />
             Nova Penalidade
@@ -396,9 +397,10 @@ export default function PenalidadesPage() {
               Cancelar
             </Button>
             <Button
+              variant="destructive"
               onClick={salvarPenalidade}
               disabled={salvando}
-              className="bg-primary text-primary-foreground hover:bg-primary/90 font-semibold"
+              className="font-semibold"
             >
               {salvando ? <Loader2 size={16} className="animate-spin mr-2" /> : null}
               Aplicar Penalidade

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { getUserFromRequest } from "@/lib/auth";
 import { STATUS_PAUSADA, calcularDuracaoSessao, logContagemSessao } from "@/lib/sessao";
+import { registrarLog } from "@/lib/audit";
 
 export async function POST(req: NextRequest) {
   const user = await getUserFromRequest();
@@ -35,6 +36,15 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  await registrarLog(service, {
+    user_id: user.id,
+    sessao_id: data.id,
+    acao: "pausar_sessao",
+    detalhe: "Contagem pausada.",
+    admin_id: null,
+    criado_em: agora,
+  });
 
   logContagemSessao(data.id, data.segundos_acumulados || 0, "pausada-manual");
 

@@ -1,8 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { getUserFromRequest } from "@/lib/auth";
 import { STATUS_ATIVA, type SessaoRow } from "@/lib/sessao";
 import { expirarSessoesVencidas } from "@/lib/sessao-server";
+import { registrarLog } from "@/lib/audit";
 
 export async function POST() {
   const user = await getUserFromRequest();
@@ -37,10 +38,11 @@ export async function POST() {
     .limit(1)
     .maybeSingle();
 
-  let { data: existente, error: listError } = await consultarExistente();
+  const consultaInicial = await consultarExistente();
+  let existente = consultaInicial.data;
 
-  if (listError) {
-    return NextResponse.json({ error: listError.message }, { status: 500 });
+  if (consultaInicial.error) {
+    return NextResponse.json({ error: consultaInicial.error.message }, { status: 500 });
   }
 
   if (existente?.status === STATUS_ATIVA) {
@@ -57,7 +59,8 @@ export async function POST() {
     }
   }
 
-  let sessao: any;
+  let sessao: { id: string; inicio: string | null; status: string; segundos_acumulados: number | null };
+  let acaoLog = "iniciar_sessao";
 
   if (existente && existente.status === "pausada") {
     const { data: atualizada, error: updError } = await service
@@ -68,6 +71,7 @@ export async function POST() {
       .single();
     if (updError) return NextResponse.json({ error: updError.message }, { status: 500 });
     sessao = atualizada;
+    acaoLog = "retomar_sessao";
   } else if (existente && existente.status === "ativa") {
     return NextResponse.json({ error: "Já existe uma sessão ativa" }, { status: 400 });
   } else {
@@ -89,10 +93,11 @@ export async function POST() {
   }
 
   // Log de auditoria
-  await service.from("logs").insert({
+  await registrarLog(service, {
     user_id: user.id,
-    acao: "iniciar_sessao",
-    detalhe: `Sessão iniciada em ${agora}`,
+    sessao_id: sessao.id,
+    acao: acaoLog,
+    detalhe: acaoLog === "iniciar_sessao" ? `Contagem iniciada em ${agora}.` : `Contagem retomada em ${agora}.`,
     admin_id: null,
     criado_em: agora,
   });

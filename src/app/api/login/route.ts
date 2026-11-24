@@ -27,9 +27,17 @@ export async function POST(req: NextRequest) {
       .from("users")
       .select("id, username, password_hash, role, avatar_url, criado_em")
       .eq("username", username.trim())
-      .single();
+      .maybeSingle();
 
-    if (error || !user) {
+    if (error) {
+      console.error("Falha ao consultar usuário no Supabase:", error);
+      return NextResponse.json(
+        { error: "Não foi possível consultar o banco de usuários. Verifique a conexão do Supabase." },
+        { status: 503 }
+      );
+    }
+
+    if (!user) {
       return NextResponse.json(
         { error: "Usuário ou senha inválidos" },
         { status: 401 }
@@ -76,7 +84,7 @@ export async function POST(req: NextRequest) {
     });
 
     return response;
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Erro na rota /api/login:", error);
     return NextResponse.json(
       { error: "Erro interno no servidor" },

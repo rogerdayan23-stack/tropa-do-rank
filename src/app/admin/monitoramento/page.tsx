@@ -161,8 +161,8 @@ export default function AdminMasterMonitor() {
   }
 
   function classeStatus(status: string) {
-    if (status === "ativa") return "border-rose-300/30 bg-rose-300/10 text-rose-100";
-    if (status === "pausada") return "border-cyan-300/30 bg-cyan-300/10 text-cyan-100";
+    if (status === "ativa") return "border-emerald-300/30 bg-emerald-300/10 text-emerald-100";
+    if (status === "pausada") return "border-amber-300/30 bg-amber-300/10 text-amber-100";
     return "border-border bg-secondary/70 text-muted-foreground";
   }
 
@@ -199,8 +199,8 @@ export default function AdminMasterMonitor() {
       )}
 
       <div className="grid grid-cols-3 gap-3">
-        <Card><CardContent className="p-4 sm:p-5"><p className="text-xs text-muted-foreground">Ativos</p><p className="mt-1 text-2xl font-bold text-rose-100">{ativas}</p></CardContent></Card>
-        <Card><CardContent className="p-4 sm:p-5"><p className="text-xs text-muted-foreground">Pausados</p><p className="mt-1 text-2xl font-bold text-cyan-100">{pausadas}</p></CardContent></Card>
+        <Card><CardContent className="p-4 sm:p-5"><p className="text-xs text-muted-foreground">Ativos</p><p className="mt-1 text-2xl font-bold text-emerald-200">{ativas}</p></CardContent></Card>
+        <Card><CardContent className="p-4 sm:p-5"><p className="text-xs text-muted-foreground">Pausados</p><p className="mt-1 text-2xl font-bold text-amber-200">{pausadas}</p></CardContent></Card>
         <Card><CardContent className="p-4 sm:p-5"><p className="text-xs text-muted-foreground">Inativos</p><p className="mt-1 text-2xl font-bold text-muted-foreground">{inativas}</p></CardContent></Card>
       </div>
 
@@ -257,7 +257,7 @@ export default function AdminMasterMonitor() {
                         {status === "ativa" ? (
                           <Button size="sm" variant="outline" onClick={() => void executarAcao("pausar", sessao.id)} className="flex-1 gap-1.5 border-rose-300/30 text-rose-100"><Pause size={13} /> Pausar</Button>
                         ) : (
-                          <Button size="sm" variant="outline" onClick={() => void executarAcao("retomar", sessao.id)} className="flex-1 gap-1.5 border-cyan-300/30 text-cyan-100"><Play size={13} /> Retomar</Button>
+                          <Button size="sm" variant="outline" onClick={() => void executarAcao("retomar", sessao.id)} className="flex-1 gap-1.5 border-emerald-300/30 text-emerald-100 hover:bg-emerald-300/10"><Play size={13} /> Retomar</Button>
                         )}
                         <Button size="sm" variant="destructive" onClick={() => {
                           if (window.confirm(`Encerrar a sessão de ${nome}?`)) void executarAcao("encerrar", sessao.id);
@@ -283,4 +283,3 @@ export default function AdminMasterMonitor() {
     </div>
   );
 }
-

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { getUserFromRequest, isManager } from "@/lib/auth";
-import { registrarAuditoria } from "@/lib/audit";
+import { registrarAuditoria, registrarLog } from "@/lib/audit";
 import { STATUS_ATIVA, STATUS_PAUSADA, STATUS_ENCERRADA, calcularDuracaoSessao, construirAtualizacaoSessao, LIMITE_SESSAO_SEGUNDOS, logContagemSessao, type SessaoRow } from "@/lib/sessao";
 import { expirarSessoesVencidas } from "@/lib/sessao-server";
 
@@ -12,7 +12,7 @@ async function requireAdmin() {
 }
 
 export async function GET() {
-  const { response, user } = await requireAdmin();
+  const { response } = await requireAdmin();
   if (response) return response;
 
   // A autorização já foi validada acima; use o cliente de serviço para a
@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
     if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
 
     const { data: alvo } = await service.from("users").select("username").eq("id", sessao.user_id).maybeSingle();
-    await registrarAuditoria(service, user!, `admin:${acao}_sessao`, `Sessão ${sessao_id} ${acao === "pausar" ? "pausada" : "retomada"}.`, { id: sessao.user_id, username: alvo?.username || null });
+    await registrarAuditoria(service, user!, `admin:${acao}_sessao`, `Sessão ${sessao_id} ${acao === "pausar" ? "pausada" : "retomada"}.`, { id: sessao.user_id, username: alvo?.username || null, sessao_id });
     return NextResponse.json({ ok: true });
   }
 
@@ -95,7 +95,11 @@ export async function POST(req: NextRequest) {
     for (const s of ativas || []) {
       const segundosAcumulados = calcularDuracaoSessao(s);
       const { error: e } = await supabase.from("sessoes").update({ status: STATUS_PAUSADA, segundos_acumulados: segundosAcumulados, ultima_atividade: agora }).eq("id", s.id);
-      if (!e) { count++; logContagemSessao(s.id, segundosAcumulados, "pausar-todos-admin"); }
+      if (!e) {
+        count++;
+        await registrarLog(service, { user_id: s.user_id, sessao_id: s.id, acao: "pausar_sessao", detalhe: "Contagem pausada pelo Admin Master.", admin_id: user!.id, criado_em: agora });
+        logContagemSessao(s.id, segundosAcumulados, "pausar-todos-admin");
+      }
     }
     const ids = (ativas || []).map((sessao) => sessao.user_id).filter(Boolean);
     const { data: alvos } = ids.length ? await service.from("users").select("username").in("id", ids) : { data: [] };
@@ -109,7 +113,11 @@ export async function POST(req: NextRequest) {
     let count = 0;
     for (const s of pausadas || []) {
       const { error: e } = await supabase.from("sessoes").update({ status: STATUS_ATIVA, inicio: agora, ultima_atividade: agora }).eq("id", s.id);
-      if (!e) { count++; logContagemSessao(s.id, s.segundos_acumulados || 0, "despausar-todos-admin"); }
+      if (!e) {
+        count++;
+        await registrarLog(service, { user_id: s.user_id, sessao_id: s.id, acao: "retomar_sessao", detalhe: "Contagem retomada pelo Admin Master.", admin_id: user!.id, criado_em: agora });
+        logContagemSessao(s.id, s.segundos_acumulados || 0, "despausar-todos-admin");
+      }
     }
     const ids = (pausadas || []).map((sessao) => sessao.user_id).filter(Boolean);
     const { data: alvos } = ids.length ? await service.from("users").select("username").in("id", ids) : { data: [] };
@@ -166,6 +174,14 @@ export async function POST(req: NextRequest) {
       const novoTotal = Number(usr?.total_segundos || 0) + acumulado;
       const { error: totalError } = await service.from("users").update({ total_segundos: novoTotal }).eq("id", sessao.user_id);
       if (totalError) return NextResponse.json({ error: totalError.message }, { status: 500 });
+      await registrarLog(service, {
+        user_id: sessao.user_id,
+        sessao_id: sessao.id,
+        acao: "encerrar_sessao",
+        detalhe: "Contagem encerrada pelo Admin Master.",
+        admin_id: user!.id,
+        criado_em: agora,
+      });
       count++;
     }
 
@@ -200,4 +216,3 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ ok: true });
 }
-

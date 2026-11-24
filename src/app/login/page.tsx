@@ -51,8 +51,7 @@ export default function AuthPage() {
       const data = await res.json();
 
       if (res.ok && data.success) {
-        // Salva token e dados do usuário no localStorage
-        localStorage.setItem("rankfarm_token", data.token);
+        // A sessão autenticada é mantida pelo cookie httpOnly da resposta.
         localStorage.setItem("rankfarm_user", JSON.stringify(data.user));
 
         toast.success(`Bem-vindo de volta, ${data.user.username}!`);

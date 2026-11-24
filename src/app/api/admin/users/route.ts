@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getUserFromRequest, isAdminRole } from "@/lib/auth";
+import { getUserFromRequest, isAdminRole, isPrimaryAdmin } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase";
 import { registrarAuditoria } from "@/lib/audit";
 
@@ -57,7 +57,7 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: "Usuário inválido" }, { status: 400 });
     }
 
-    if (user_id === admin.id && acao !== "adjust_hours") {
+    if (user_id === admin.id && acao !== "adjust_hours" && acao !== "reset") {
       return NextResponse.json(
         { error: "Você não pode executar esta ação na sua própria conta" },
         { status: 403 }
@@ -155,6 +155,10 @@ export async function PATCH(req: NextRequest) {
     }
 
     if (acao === "toggle_role") {
+      if (!isPrimaryAdmin(admin)) {
+        return NextResponse.json({ error: "Somente o Admin Master dnz pode alterar cargos." }, { status: 403 });
+      }
+
       const { role } = body;
       if (!ROLES_VALIDAS.includes(role)) {
         return NextResponse.json({ error: "Cargo inválido" }, { status: 400 });
@@ -257,4 +261,3 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: "Erro interno ao remover usuário" }, { status: 500 });
   }
 }
-

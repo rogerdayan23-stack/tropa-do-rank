@@ -76,6 +76,11 @@ export function isAdminRole(user: AppUser | null | undefined): boolean {
   return !!user && user.role === "admin";
 }
 
+// Operações exclusivas do dono atual do sistema.
+export function isPrimaryAdmin(user: AppUser | null | undefined): boolean {
+  return user?.role === "admin" && user.username.trim().toLocaleLowerCase("pt-BR") === "dnz";
+}
+
 // Admin (compatível com o antigo is_admin)
 export function isAdminUser(user: AppUser | null | undefined): boolean {
   return isAdminRole(user) || user?.is_admin === true;

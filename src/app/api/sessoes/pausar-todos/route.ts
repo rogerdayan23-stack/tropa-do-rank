@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { getUserFromRequest, isAdminRole } from "@/lib/auth";
 import { STATUS_ATIVA, STATUS_PAUSADA, calcularDuracaoSessao, logContagemSessao } from "@/lib/sessao";
-import { registrarAuditoria } from "@/lib/audit";
+import { registrarAuditoria, registrarLog } from "@/lib/audit";
 
 export async function POST(req: NextRequest) {
   const user = await getUserFromRequest();
@@ -33,6 +33,14 @@ export async function POST(req: NextRequest) {
         .eq("id", s.id);
       if (!updError) {
         count++;
+        await registrarLog(service, {
+          user_id: s.user_id,
+          sessao_id: s.id,
+          acao: "pausar_sessao",
+          detalhe: "Contagem pausada pelo Admin Master.",
+          admin_id: user.id,
+          criado_em: agora,
+        });
         logContagemSessao(s.id, segundosAcumulados, "pausar-todos");
       }
     }
@@ -60,6 +68,14 @@ export async function POST(req: NextRequest) {
         .eq("id", s.id);
       if (!updError) {
         count++;
+        await registrarLog(service, {
+          user_id: s.user_id,
+          sessao_id: s.id,
+          acao: "retomar_sessao",
+          detalhe: "Contagem retomada pelo Admin Master.",
+          admin_id: user.id,
+          criado_em: agora,
+        });
         logContagemSessao(s.id, s.segundos_acumulados || 0, "despausar-todos");
       }
     }
@@ -71,4 +87,3 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ error: "Ação inválida" }, { status: 400 });
 }
-

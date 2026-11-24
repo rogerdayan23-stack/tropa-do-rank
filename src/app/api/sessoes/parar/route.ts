@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { getUserFromRequest } from "@/lib/auth";
-import { STATUS_ATIVA, calcularDuracaoSessao, logContagemSessao } from "@/lib/sessao";
+import { calcularDuracaoSessao, logContagemSessao } from "@/lib/sessao";
+import { registrarLog } from "@/lib/audit";
 
 export async function POST(req: NextRequest) {
   const user = await getUserFromRequest();
@@ -39,8 +40,9 @@ export async function POST(req: NextRequest) {
   const novoTotal = ((usr?.total_segundos as number) || 0) + acumulado;
   await service.from("users").update({ total_segundos: novoTotal }).eq("id", user.id);
 
-  await service.from("logs").insert({
+  await registrarLog(service, {
     user_id: user.id,
+    sessao_id: id,
     acao: "encerrar_sessao",
     detalhe: `Sessão encerrada com ${acumulado} segundos`,
     admin_id: null,
@@ -51,4 +53,3 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ ok: true, total_segundos: acumulado });
 }
-

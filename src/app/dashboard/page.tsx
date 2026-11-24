@@ -3,11 +3,36 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Play, Pause, Square, Timer, Clock, AlertTriangle, DollarSign, Shield, Users } from "lucide-react";
+import { Play, Pause, Square, Clock, AlertTriangle, DollarSign, Users, TrendingUp, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { LIMITE_SESSAO_SEGUNDOS } from "@/lib/sessao";
+
+interface SessaoDashboard {
+  id: string;
+  inicio: string | null;
+  status: string;
+  duracao?: number;
+  segundos_acumulados?: number | null;
+}
+
+interface JogadorSaldoDashboard {
+  id: string;
+  total_receber_semana: number;
+}
+
+interface ResumoSemanaDashboard {
+  lucro_bruto_semana: number;
+  total_horas_equipe_semana: number;
+}
+
+interface SessaoEquipeDashboard {
+  id: string;
+  jogador: string;
+  status: "ativa" | "pausada";
+  segundos: number;
+}
 
 function formatHMS(segundos: number) {
   const h = Math.floor(segundos / 3600);
@@ -20,9 +45,23 @@ function formatHHMM(iso: string) {
   return new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 }
 
+function dataLocal(date = new Date()) {
+  const deslocada = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return deslocada.toISOString().slice(0, 10);
+}
+
+function formatHoras(horas: number) {
+  const minutosTotais = Math.max(0, Math.round((Number(horas) || 0) * 60));
+  return `${Math.floor(minutosTotais / 60)}h ${String(minutosTotais % 60).padStart(2, "0")}m`;
+}
+
+function moeda(valor: number) {
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(valor) || 0);
+}
+
 export default function DashboardPage() {
   const router = useRouter();
-  const [sessao, setSessao] = useState<any>(null);
+  const [sessao, setSessao] = useState<SessaoDashboard | null>(null);
   const [segundos, setSegundos] = useState(0);
   const [expirada, setExpirada] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -30,26 +69,57 @@ export default function DashboardPage() {
   const [segundosBase, setSegundosBase] = useState(0);
   const [statusAtual, setStatusAtual] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [usuarioId, setUsuarioId] = useState<string | null>(null);
+  const [resumoSemana, setResumoSemana] = useState<ResumoSemanaDashboard | null>(null);
+  const [jogadoresSemana, setJogadoresSemana] = useState<JogadorSaldoDashboard[]>([]);
+  const [statusEquipe, setStatusEquipe] = useState<SessaoEquipeDashboard[]>([]);
   const timerSyncRef = useRef<{ segundos: number; sincronizadoEm: number } | null>(null);
 
   useEffect(() => {
     fetch("/api/auth/me")
       .then((r) => r.json())
-      .then((d) => setIsAdmin(d.user?.role === "admin"))
+      .then((d) => {
+        setIsAdmin(d.user?.role === "admin");
+        setUsuarioId(d.user?.id || null);
+      })
       .catch(() => {});
   }, []);
 
   useEffect(() => {
-    let interval: NodeJS.Timeout;
-    let hbInterval: NodeJS.Timeout;
+    let ativo = true;
+    const carregarPainel = async () => {
+      try {
+        const [resumoRes, equipeRes] = await Promise.all([
+          fetch(`/api/saldos?data=${dataLocal()}`, { cache: "no-store" }),
+          fetch("/api/painel", { cache: "no-store" }),
+        ]);
+        const [resumoData, equipeData] = await Promise.all([
+          resumoRes.json() as Promise<{ resumo_semanal?: ResumoSemanaDashboard; jogadores?: JogadorSaldoDashboard[] }>,
+          equipeRes.json() as Promise<{ sessoes?: SessaoEquipeDashboard[] }>,
+        ]);
+        if (!ativo) return;
+        if (resumoRes.ok) {
+          setResumoSemana(resumoData.resumo_semanal ?? null);
+          setJogadoresSemana(resumoData.jogadores || []);
+        }
+        if (equipeRes.ok) setStatusEquipe(equipeData.sessoes || []);
+      } catch {
+        // O painel mantém os últimos dados carregados se a rede oscilar.
+      }
+    };
+    void carregarPainel();
+    const intervalo = setInterval(() => void carregarPainel(), 30_000);
+    return () => { ativo = false; clearInterval(intervalo); };
+  }, []);
 
+  useEffect(() => {
     const carregar = async () => {
       try {
         const res = await fetch("/api/sessoes");
-        const data = await res.json();
+        const data = await res.json() as { sessoes?: SessaoDashboard[] };
         const lista = data.sessoes || [];
         // Pega a sessão mais recente ativa ou pausada
-        const ativaOuPausada = lista.find((s: any) => s.status === "ativa" || s.status === "pausada");
+        const ativaOuPausada = lista.find((s) => s.status === "ativa" || s.status === "pausada");
         const maisRecente = lista[0];
 
         if (ativaOuPausada && ativaOuPausada.status === "ativa") {
@@ -88,8 +158,8 @@ export default function DashboardPage() {
     };
 
     carregar();
-    interval = setInterval(carregar, 5000);
-    hbInterval = setInterval(() => {
+    const interval = setInterval(carregar, 5000);
+    const hbInterval = setInterval(() => {
       fetch("/api/heartbeat", { method: "POST", body: JSON.stringify({ id: sessao?.id }) }).catch(() => {});
     }, 60000);
 
@@ -220,45 +290,88 @@ export default function DashboardPage() {
   };
 
   const temSessaoAtivaOuPausada = statusAtual === "ativa" || statusAtual === "pausada";
+  const meuSaldo = jogadoresSemana.find((j) => j.id === usuarioId);
+  const farmandoAgora = statusEquipe.filter((s) => s.status === "ativa");
+  const pausadosAgora = statusEquipe.filter((s) => s.status === "pausada");
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0 pl-12 sm:pl-0">
+        <div className="min-w-0 pl-12 lg:pl-0">
           <h1 className="text-3xl font-bold tracking-tight">Início</h1>
           <p className="text-muted-foreground">Controle suas sessões de farm</p>
         </div>
         <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:justify-end">
+          {statusAtual === "pausada" && (
+            <Button variant="success" onClick={retomar} disabled={loading} className="col-span-2 h-12 px-4 font-bold sm:col-span-1 sm:px-8">
+              <Play size={20} className="mr-2" /> RETOMAR FARM
+            </Button>
+          )}
           {!temSessaoAtivaOuPausada ? (
-            <Button onClick={iniciar} disabled={loading} className="col-span-2 h-12 px-4 bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 transition-all font-bold text-base sm:col-span-1 sm:px-8 sm:text-lg">
+            <Button variant="success" onClick={iniciar} disabled={loading} className="col-span-2 h-12 px-4 shadow-lg font-bold text-base sm:col-span-1 sm:px-8 sm:text-lg">
               <Play size={24} className="mr-2" />
               INICIAR FARM
             </Button>
           ) : null}
 
-          {isAdmin && (
-            <>
-              <Button onClick={pausarTodos} disabled={loading} variant="outline" className="h-11 px-2 text-xs border-rose-400/35 text-rose-200 hover:bg-rose-400/10 sm:h-12 sm:px-4 sm:text-sm">
-                <Pause size={18} className="mr-2" /> Pausar Todos
-              </Button>
-              <Button onClick={despausarTodos} disabled={loading} variant="outline" className="h-11 px-2 text-xs border-primary/40 text-primary hover:bg-primary/10 sm:h-12 sm:px-4 sm:text-sm">
-                <Play size={18} className="mr-2" /> Despausar Todos
-              </Button>
-              <Button onClick={contagem} disabled={loading} variant="outline" className="h-11 px-2 text-xs border-primary/40 text-primary hover:bg-primary/10 sm:h-12 sm:px-4 sm:text-sm">
-                <Clock size={18} className="mr-2" /> Contar
-              </Button>
-            </>
-          )}
         </div>
       </div>
+
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Resumo semanal">
+        <Card>
+          <CardContent className="flex items-center gap-3 p-4">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary"><Clock size={18} /></span>
+            <div><p className="text-xs text-muted-foreground">Horas da semana</p><p className="text-xl font-bold tabular-nums">{resumoSemana ? formatHoras(resumoSemana.total_horas_equipe_semana) : "—"}</p></div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="flex items-center gap-3 p-4">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-400/10 text-emerald-300"><TrendingUp size={18} /></span>
+            <div><p className="text-xs text-muted-foreground">Lucro da semana</p><p className="text-xl font-bold tabular-nums">{resumoSemana ? moeda(resumoSemana.lucro_bruto_semana) : "—"}</p></div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="flex items-center gap-3 p-4">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-400/10 text-rose-200"><DollarSign size={18} /></span>
+            <div><p className="text-xs text-muted-foreground">Sua estimativa</p><p className="text-xl font-bold tabular-nums">{meuSaldo ? moeda(meuSaldo.total_receber_semana) : "—"}</p></div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="flex items-center gap-3 p-4">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-400/10 text-rose-200"><Users size={18} /></span>
+            <div><p className="text-xs text-muted-foreground">Farmando agora</p><p className="text-xl font-bold tabular-nums">{farmandoAgora.length} <span className="text-sm font-medium text-muted-foreground">ativos</span></p></div>
+          </CardContent>
+        </Card>
+      </section>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base"><UserRound size={17} className="text-primary" /> Agora na tropa</CardTitle>
+          <CardDescription>Quem está farmando e quem pausou a contagem.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4 sm:grid-cols-2">
+          <div className="rounded-xl border border-emerald-400/15 bg-emerald-400/[0.04] p-3">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-emerald-200">Farmando</p>
+            <div className="flex flex-wrap gap-2">
+              {farmandoAgora.length ? farmandoAgora.map((s) => <Badge key={s.id} variant="outline" className="border-emerald-300/20 text-emerald-100">{s.jogador} · {formatHMS(s.segundos)}</Badge>) : <span className="text-sm text-muted-foreground">Ninguém está farmando agora.</span>}
+            </div>
+          </div>
+          <div className="rounded-xl border border-amber-400/15 bg-amber-400/[0.04] p-3">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-amber-200">Pausados</p>
+            <div className="flex flex-wrap gap-2">
+              {pausadosAgora.length ? pausadosAgora.map((s) => <Badge key={s.id} variant="outline" className="border-amber-300/20 text-amber-100">{s.jogador} · {formatHMS(s.segundos)}</Badge>) : <span className="text-sm text-muted-foreground">Ninguém está pausado.</span>}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {temSessaoAtivaOuPausada ? (
         <Card className="border-primary/50 bg-primary/5">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-primary">Sessão Ativa</CardTitle>
+            <CardTitle className="text-sm font-medium text-primary">{statusAtual === "pausada" ? "Sessão pausada" : "Sessão ativa"}</CardTitle>
             <div className="text-right">
               <div className="text-4xl font-mono font-bold text-primary">{formatHMS(segundos)}</div>
-              <div className="text-xs text-muted-foreground">Sessão ativa desde {formatHHMM(inicioAtual || "")}</div>
+              <div className="text-xs text-muted-foreground">{statusAtual === "pausada" ? "Contagem pausada" : `Contando desde ${formatHHMM(inicioAtual || "")}`}</div>
             </div>
           </CardHeader>
           <CardContent className="pt-0">
@@ -266,7 +379,7 @@ export default function DashboardPage() {
               <Button onClick={pausar} disabled={loading || statusAtual !== "ativa"} className="flex-1 h-11 bg-secondary text-secondary-foreground shadow-sm">
                 <Pause size={20} className="mr-2" /> Pausar
               </Button>
-              <Button onClick={retomar} disabled={loading || statusAtual !== "pausada"} className="flex-1 h-11 shadow-sm">
+              <Button variant="success" onClick={retomar} disabled={loading || statusAtual !== "pausada"} className="flex-1 h-11 shadow-sm">
                 <Play size={20} className="mr-2" /> Retomar
               </Button>
               <Button onClick={parar} disabled={loading} className="flex-1 h-11 bg-destructive text-destructive-foreground shadow-sm">
@@ -324,6 +437,17 @@ export default function DashboardPage() {
 
       {/* Botões admin */}
       {isAdmin && (
+        <details className="group rounded-xl border border-rose-400/20 bg-rose-400/[0.025] p-4">
+          <summary className="cursor-pointer list-none font-semibold marker:hidden">Controles administrativos <span className="ml-2 text-xs font-normal text-muted-foreground">Clique para abrir</span></summary>
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            <Button onClick={pausarTodos} disabled={loading} variant="outline" className="border-rose-400/35 text-rose-200 hover:bg-rose-400/10"><Pause size={17} className="mr-2" />Pausar todos</Button>
+            <Button onClick={despausarTodos} disabled={loading} variant="outline" className="border-emerald-400/40 text-emerald-300 hover:bg-emerald-400/10"><Play size={17} className="mr-2" />Retomar todos</Button>
+            <Button onClick={contagem} disabled={loading} variant="outline" title="Sincroniza a duração das sessões e encerra as que atingiram cinco horas."><Clock size={17} className="mr-2" />Sincronizar horas</Button>
+          </div>
+        </details>
+      )}
+
+      {isAdmin && (
         <div className="grid sm:grid-cols-2 gap-4">
           <Card
             className="border-rose-400/20 hover:border-rose-400/40 cursor-pointer transition-all hover:bg-rose-400/5"
@@ -362,4 +486,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-

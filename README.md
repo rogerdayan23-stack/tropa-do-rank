@@ -1,102 +1,66 @@
-# Rank Farm
+# Rank dos Cuiudos
 
-Sistema completo de controle de "farm de rank" para até 4 pessoas, construído com Next.js 14 (App Router), TypeScript, Tailwind CSS, shadcn/ui, Supabase e deploy na Vercel.
+Aplicação para acompanhar sessões de farm, ranking, regras e divisão semanal dos lucros da tropa. Feita com Next.js 14, TypeScript, Tailwind CSS e Supabase.
 
-## Stack
+## Tecnologias
 
-- Next.js 14 (App Router) + TypeScript
-- Tailwind CSS + shadcn/ui (Radix UI)
-- Supabase (Postgres + Auth custom)
-- Vercel (deploy + Cron)
-- Lucide React (ícones), Sonner (toasts), date-fns
+- Next.js 14 (App Router) e React 18
+- Supabase/PostgreSQL, com autenticação própria por usuário e senha
+- Tailwind CSS, Radix UI e Lucide
+- Geist e Geist Mono locais em `src/app/fonts`; o build não depende de buscar fontes online
+- Deploy preparado para Vercel
 
-## Banco de dados (Supabase)
+## Banco de dados
 
-1. Crie um projeto no [Supabase Dashboard](https://supabase.com/dashboard).
-2. Vá em **SQL Editor** e rode o conteúdo do arquivo [`schema.sql`](./schema.sql).
-3. Vá em **Settings > API** e copie:
-   - `Project URL` → `NEXT_PUBLIC_SUPABASE_URL`
-   - `Project API keys > anon public` → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-   - `Project API keys > service_role secret` → `SUPABASE_SERVICE_ROLE_KEY`
+Para um banco novo, execute [`schema.sql`](./schema.sql) no SQL Editor do Supabase.
 
-## Variáveis de ambiente
+Para um banco já existente, faça um backup e execute [`migrations/2026-11-23-operacao-semanal.sql`](./migrations/2026-11-23-operacao-semanal.sql) **antes de publicar as rotas desta versão**. Ela adiciona o vínculo entre logs e sessões, converte valores financeiros para `numeric`, IDs para UUID e instala a função transacional de fechamento semanal. Se a verificação da migração encontrar IDs financeiros inválidos, ela para sem converter os dados; corrija esses registros e rode novamente.
 
-Copie `.env.example` para `.env.local` e preencha:
+No painel do Supabase, em **Settings → API**, copie:
 
-```bash
-cp .env.example .env.local
-```
+- `Project URL` para `NEXT_PUBLIC_SUPABASE_URL`
+- chave `anon public` para `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- chave `service_role` para `SUPABASE_SERVICE_ROLE_KEY` (somente servidor)
 
-Edite `.env.local` com os valores do Supabase.
+## Configuração local
 
-## Instalação e execução local
+Copie `.env.example` para `.env.local` e preencha as variáveis. `JWT_SECRET` deve ser aleatório e ter pelo menos 32 caracteres.
 
 ```bash
-# Instalar dependências
 npm install
-
-# Rodar em desenvolvimento
 npm run dev
-
-# Abrir http://localhost:3000
 ```
 
-O primeiro usuário cadastrado se torna automaticamente o **admin**.
+Abra <http://localhost:3000>. O cadastro está disponível na tela de login e exige nome de usuário e senha. A senha é armazenada com bcrypt; após entrar, a sessão persiste em um cookie httpOnly chamado `tropa_session`. Contas novas recebem o papel `user`; a promoção de um Admin Master é feita explicitamente no banco.
 
-## Fluxo de funcionamento
+## Recursos
 
-1. **Login**: informe um apelido único (sem senha). Se não existir, o usuário é criado automaticamente. A sessão persiste via cookie (`tropa_session`).
-2. **Dashboard**: clique em **INICIAR FARM** para criar uma sessão ativa. O cronômetro é calculado no servidor (`segundos_acumulados + (now() - inicio)`). Use Pausar / Retomar / Parar.
-3. **Persistência**: ao fechar e reabrir o navegador, a sessão ativa é mantida.
-4. **Limite de sessão**: sessões ativas são encerradas ao atingir 5h. A aplicação também verifica sessões vencidas quando o painel do jogador ou o monitoramento administrativo é consultado.
-5. **Heartbeat**: o frontend envia POST a cada 60s; as consultas do painel verificam o limite e fecham sessões vencidas.
-6. **Histórico**: sessões encerradas com filtros por período.
-7. **Ranking**: top usuários com medalhas 🥇🥈🥉.
-8. **Perfil**: total, média por sessão, streak e gráfico de 7 dias.
-9. **Regras**: texto editável pelo admin; aceite obrigatório na primeira sessão.
-10. **Admin**: encerrar/ajustar/cancelar sessões, editar regras, exportar CSV, log de auditoria.
+- **Início:** resumo semanal de horas e lucro, estimativa do próprio jogador, status da equipe e controles de sessão.
+- **Sessões:** iniciar, pausar, retomar e encerrar contagem. O limite por sessão é de cinco horas.
+- **Registro de horas:** timeline por sessão com horários e duração dos trechos ativos.
+- **Ranking:** semana, mês ou acumulado geral; inclui meta semanal inicial de 10 horas, sequência e recorde de sessão.
+- **Saldos:** soma das horas da semana, calcula a taxa horária, desconta penalidades e apresenta lucro e horas por dia.
+- **Fechamento semanal:** mostra a conferência por jogador, arquiva o resumo e baixa um comprovante CSV. O fechamento usa uma função SQL transacional e um identificador de solicitação para evitar duplicações em tentativas repetidas.
+- **Administração:** usuários, regras, sessões, monitoramento e auditoria com permissões verificadas no servidor.
+
+### Regra financeira
+
+`taxa por hora = lucro bruto semanal ÷ horas totais da equipe`
+
+`valor bruto do jogador = horas do jogador na semana × taxa por hora`
+
+`total a receber = máximo entre zero e (valor bruto − penalidades da semana)`
 
 ## Deploy na Vercel
 
-1. Faça push do código para um repositório GitHub.
-2. Importe o repositório na [Vercel](https://vercel.com).
-3. Adicione as variáveis `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `JWT_SECRET` e `CRON_SECRET` em **Settings > Environment Variables** da Vercel. Use valores fortes para as chaves e nunca as coloque no GitHub.
-4. O arquivo [`vercel.json`](./vercel.json) agenda uma limpeza diária em `/api/cron/timeout`, compatível com o plano Hobby da Vercel. A limpeza imediata de sessões vencidas também ocorre quando os painéis consultam os dados.
-5. Rode `npm run build` localmente para verificar se não há erros de TypeScript antes de fazer push.
+1. Configure `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `JWT_SECRET` e `CRON_SECRET` nas variáveis de ambiente.
+2. Para banco existente, aplique a migração SQL antes do deploy.
+3. Publique o projeto. A rotina diária de timeout é definida em `vercel.json`.
+4. Confira a compilação com `npm run build` antes de enviar alterações.
 
-## Scripts
+## Comandos
 
-- `npm run dev` — servidor de desenvolvimento
+- `npm run dev` — ambiente de desenvolvimento
 - `npm run build` — build de produção
-- `npm run start` — servidor de produção
-- `npm run lint` — linter
-
-## Estrutura de pastas
-
-```
-src/
-  app/
-    (pages): dashboard, historico, ranking, perfil, regras, admin, login
-    api/
-      auth/login, auth/logout, auth/me
-      sessoes, sessoes/iniciar, sessoes/pausar, sessoes/retomar, sessoes/parar
-      heartbeat, ranking, regras
-      admin/sessoes, admin/logs, admin/export
-      cron/timeout
-  components/
-    ui/ (shadcn/ui components)
-    navbar.tsx, providers.tsx
-  lib/
-    supabase.ts, supabase-browser.ts, auth.ts, utils.ts
-  types/
-    database.ts
-```
-
-## Regras de negócio resumidas
-
-- Apelido único, sem senha.
-- Sessão ativa calculada no servidor.
-- Limite de 5h por sessão (expiração automática).
-- Heartbeat de 60s; sessões vencidas são verificadas no painel e pelo cron diário.
-- Primeiro usuário cadastrado = admin.
-- Regras editáveis apenas pelo admin.
+- `npm run start` — inicia o build de produção
+- `npm run lint` — linter do Next.js

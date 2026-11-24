@@ -90,4 +90,3 @@ export function construirAtualizacaoSessao(s: SessaoRow, agora: string): {
 export function logContagemSessao(sessaoId: string, segundos: number, contexto = "contagem") {
   console.log(`[FARM] Sessão ${sessaoId} ${contexto}: ${segundos} segundos acumulados`);
 }
-

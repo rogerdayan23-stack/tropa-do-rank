@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -18,6 +18,8 @@ import {
   UserCog,
   Crown,
   FileClock,
+  Clock3,
+  type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -46,6 +48,7 @@ const adminMasterItems = [
 ];
 const adminSharedItems = [
   { label: "Registros", href: "/admin/registros", icon: FileClock },
+  { label: "Registro de Horas", href: "/admin/horas", icon: Clock3 },
   { label: "Monitoramento", href: "/admin/monitoramento", icon: Clock },
 ];
 
@@ -55,26 +58,38 @@ export function Sidebar() {
   const [user, setUser] = useState<NavUser | null>(null);
   const [open, setOpen] = useState(false);
 
-  const carregar = async () => {
+  const carregar = useCallback(async () => {
     try {
-      const stored = localStorage.getItem("rankfarm_user");
-      if (stored) setUser(JSON.parse(stored));
       const res = await fetch("/api/auth/me");
+      if (res.status === 401) {
+        localStorage.removeItem("rankfarm_user");
+        localStorage.removeItem("rankfarm_token");
+        localStorage.removeItem("tropa_token");
+        setUser(null);
+        await fetch("/api/auth/logout", { method: "POST" });
+        router.replace("/login");
+        return;
+      }
       if (res.ok) {
         const data = await res.json();
         if (data.user) {
           setUser(data.user);
           localStorage.setItem("rankfarm_user", JSON.stringify(data.user));
         }
+      } else {
+        setUser(null);
+        localStorage.removeItem("rankfarm_user");
       }
-    } catch {}
-  };
+    } catch {
+      setUser(null);
+    }
+  }, [router]);
 
   useEffect(() => {
     carregar();
     window.addEventListener("user_updated", carregar);
     return () => window.removeEventListener("user_updated", carregar);
-  }, [pathname]);
+  }, [pathname, carregar]);
 
   // Fecha sidebar mobile ao navegar
   useEffect(() => {
@@ -85,6 +100,7 @@ export function Sidebar() {
 
   const handleLogout = async () => {
     localStorage.removeItem("rankfarm_user");
+    localStorage.removeItem("rankfarm_token");
     localStorage.removeItem("tropa_token");
     await fetch("/api/auth/logout", { method: "POST" });
     router.push("/login");
@@ -96,7 +112,7 @@ export function Sidebar() {
       : `/${user.avatar_url.replace(/^\//, "")}`
     : null;
 
-  const NavLink = ({ href, icon: Icon, label }: { href: string; icon: any; label: string }) => {
+  const NavLink = ({ href, icon: Icon, label }: { href: string; icon: LucideIcon; label: string }) => {
     const isActive = pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
     return (
       <Link
@@ -119,8 +135,8 @@ export function Sidebar() {
     <div className="flex flex-col h-full">
       {/* Logo */}
       <div className="flex items-center gap-3 px-4 py-5 border-b border-border/40">
-        <div className="relative flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border border-rose-300/35 bg-gradient-to-br from-rose-500/25 to-amber-200/10 shadow-[0_0_20px_rgba(236,72,126,0.15)]">
-          <Crown size={21} strokeWidth={2.2} className="text-rose-200" />
+        <div className="relative flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border border-rose-300/35 bg-gradient-to-br from-rose-400/25 to-amber-200/10 shadow-[0_0_20px_rgba(236,72,126,0.16)]">
+          <Crown size={21} strokeWidth={2.2} className="text-rose-100" />
         </div>
         <div className="min-w-0">
           <p className="whitespace-nowrap text-[11px] font-black tracking-[0.08em] text-foreground">RANK DOS CUIUDOS</p>
@@ -203,7 +219,7 @@ export function Sidebar() {
       {/* Mobile toggle button */}
       <button
         onClick={() => setOpen(!open)}
-        className="lg:hidden fixed top-4 left-4 z-50 p-2 rounded-lg bg-background border border-border/60 text-foreground shadow-lg"
+        className={cn("lg:hidden fixed top-4 z-50 p-2 rounded-lg bg-background border border-border/60 text-foreground shadow-lg transition-[left]", open ? "left-[196px]" : "left-4")}
       >
         {open ? <X size={20} /> : <Menu size={20} />}
       </button>
@@ -219,7 +235,7 @@ export function Sidebar() {
       {/* Sidebar — desktop fixed, mobile slide */}
       <aside
         className={cn(
-          "fixed left-0 top-0 h-screen w-60 bg-[#090c14] border-r border-border/60 z-40 transition-transform duration-200",
+          "fixed left-0 top-0 h-screen w-60 bg-[#100d10] border-r border-border/60 z-40 transition-transform duration-200",
           "lg:translate-x-0",
           open ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         )}
@@ -229,4 +245,3 @@ export function Sidebar() {
     </>
   );
 }
-

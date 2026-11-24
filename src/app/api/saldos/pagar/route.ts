@@ -75,4 +75,3 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Erro interno ao confirmar pagamento" }, { status: 500 });
   }
 }
-

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { registrarLog } from "@/lib/audit";
 import {
   calcularDuracaoSessao,
   LIMITE_SESSAO_SEGUNDOS,
@@ -52,6 +53,15 @@ export async function expirarSessoesVencidas(
       .eq("id", sessao.user_id);
 
     if (erroTotal) throw new Error(erroTotal.message);
+
+    await registrarLog(supabase, {
+      user_id: sessao.user_id,
+      sessao_id: sessao.id,
+      acao: "encerrar_sessao",
+      detalhe: "Contagem encerrada automaticamente ao atingir o limite.",
+      admin_id: null,
+      criado_em: agora,
+    });
 
     expiradas++;
     logContagemSessao(sessao.id, segundos, "expirou-5h");
