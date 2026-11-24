@@ -344,7 +344,9 @@ export async function GET(req: NextRequest) {
           ? Math.min(saldoDia, disponivelNoDiaDoAjuste)
           : saldoDia;
         const descontado = Math.min(disponivel, restante);
-        horasDoUsuario[dia] = disponivel - descontado;
+        // Mantém no saldo as horas que não estavam disponíveis no momento
+        // do ajuste (por exemplo, sessões iniciadas depois dele no mesmo dia).
+        horasDoUsuario[dia] = saldoDia - descontado;
         restante -= descontado;
         if (restante === 0) break;
       }
