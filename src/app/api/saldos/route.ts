@@ -109,7 +109,7 @@ export async function GET(req: NextRequest) {
     const sessoesEncontradas = sessoes || [];
     const idsSessoes = sessoesEncontradas.map((sessao) => sessao.id).filter(Boolean);
     let eventosPorSessao = new Map<string, { acao: string; criado_em: string }[]>();
-    const eventosPorUsuarioLegado = new Map<string, { acao: string; criado_em: string }[]>();
+    const eventosPorUsuario = new Map<string, { acao: string; criado_em: string }[]>();
     let usaEventosLegados = false;
     if (idsSessoes.length > 0) {
       const { data: eventosSessao, error: eventosSessaoError } = await supabase
@@ -129,6 +129,11 @@ export async function GET(req: NextRequest) {
           const lista = eventosPorSessao.get(evento.sessao_id) || [];
           lista.push({ acao: evento.acao, criado_em: evento.criado_em });
           eventosPorSessao.set(evento.sessao_id, lista);
+        }
+        for (const sessao of sessoesEncontradas) {
+          const lista = eventosPorUsuario.get(sessao.user_id) || [];
+          lista.push(...(eventosPorSessao.get(sessao.id) || []));
+          eventosPorUsuario.set(sessao.user_id, lista);
         }
       } else {
         // No esquema legado, `inicio` muda quando uma sessão é retomada, mas
@@ -155,9 +160,9 @@ export async function GET(req: NextRequest) {
 
           for (const evento of eventosLegados || []) {
             if (!evento.user_id || !evento.criado_em) continue;
-            const lista = eventosPorUsuarioLegado.get(evento.user_id) || [];
+            const lista = eventosPorUsuario.get(evento.user_id) || [];
             lista.push({ acao: evento.acao, criado_em: evento.criado_em });
-            eventosPorUsuarioLegado.set(evento.user_id, lista);
+            eventosPorUsuario.set(evento.user_id, lista);
           }
 
           // Inclui o último reset anterior ao período e todos os desta semana:
@@ -173,10 +178,10 @@ export async function GET(req: NextRequest) {
           if (resetsLegadosError) throw resetsLegadosError;
           for (const reset of resetsLegados || []) {
             if (!reset.user_id || !reset.criado_em) continue;
-            const lista = eventosPorUsuarioLegado.get(reset.user_id) || [];
+            const lista = eventosPorUsuario.get(reset.user_id) || [];
             if (!lista.some((evento) => evento.acao === reset.acao && evento.criado_em === reset.criado_em)) {
               lista.push({ acao: reset.acao, criado_em: reset.criado_em });
-              eventosPorUsuarioLegado.set(reset.user_id, lista);
+              eventosPorUsuario.set(reset.user_id, lista);
             }
           }
 
@@ -186,7 +191,7 @@ export async function GET(req: NextRequest) {
             const acaoFinal = sessao.status === "pausada" && !sessao.fim ? "pausar_sessao" : "encerrar_sessao";
             const horarioFinal = sessao.fim || (sessao.status !== "ativa" ? sessao.ultima_atividade : null);
             if (!horarioFinal) continue;
-            const lista = eventosPorUsuarioLegado.get(sessao.user_id) || [];
+            const lista = eventosPorUsuario.get(sessao.user_id) || [];
             const instanteFinal = Date.parse(horarioFinal);
             const temFinal = lista.some((evento) => {
               const acao = evento.acao.replace(/^admin:/, "");
@@ -196,7 +201,7 @@ export async function GET(req: NextRequest) {
             });
             if (!temFinal) {
               lista.push({ acao: acaoFinal, criado_em: horarioFinal });
-              eventosPorUsuarioLegado.set(sessao.user_id, lista);
+              eventosPorUsuario.set(sessao.user_id, lista);
             }
           }
         }
@@ -215,6 +220,35 @@ export async function GET(req: NextRequest) {
 
     if (ajustesErr) throw ajustesErr;
 
+    for (const registro of ajustesRows || []) {
+      if (registro.acao !== "admin_reset_user" || !registro.user_id || !registro.criado_em) continue;
+      const lista = eventosPorUsuario.get(registro.user_id) || [];
+      if (!lista.some((evento) => evento.acao === registro.acao && evento.criado_em === registro.criado_em)) {
+        lista.push({ acao: registro.acao, criado_em: registro.criado_em });
+        eventosPorUsuario.set(registro.user_id, lista);
+      }
+    }
+
+    if (!usaEventosLegados) {
+      for (const sessao of sessoesEncontradas) {
+        const acaoFinal = sessao.status === "pausada" && !sessao.fim ? "pausar_sessao" : "encerrar_sessao";
+        const horarioFinal = sessao.fim || (sessao.status !== "ativa" ? sessao.ultima_atividade : null);
+        if (!horarioFinal) continue;
+        const lista = eventosPorUsuario.get(sessao.user_id) || [];
+        const instanteFinal = Date.parse(horarioFinal);
+        const temFinal = lista.some((evento) => {
+          const acao = evento.acao.replace(/^admin:/, "");
+          return ["pausar_sessao", "encerrar_sessao"].includes(acao)
+            && Number.isFinite(Date.parse(evento.criado_em))
+            && Math.abs(Date.parse(evento.criado_em) - instanteFinal) <= 60_000;
+        });
+        if (!temFinal) {
+          lista.push({ acao: acaoFinal, criado_em: horarioFinal });
+          eventosPorUsuario.set(sessao.user_id, lista);
+        }
+      }
+    }
+
     // 4. Agrupa segundos por usuário e por data
     const segundosPorUsuarioPorDia: Record<string, Record<string, number>> = {};
     for (const u of (todosUsuarios || [])) {
@@ -222,6 +256,7 @@ export async function GET(req: NextRequest) {
     }
 
     const ultimoResetPorUsuario: Record<string, number> = {};
+    const creditosPositivosPorDia: Record<string, number> = {};
     for (const registro of (ajustesRows || [])) {
       if (registro.acao !== "admin_reset_user" || !registro.user_id || !registro.criado_em) continue;
       ultimoResetPorUsuario[registro.user_id] = Math.max(
@@ -234,7 +269,7 @@ export async function GET(req: NextRequest) {
     const fimSemanaMs = Math.min(Date.parse(semana.fimISO), Date.now());
     if (usaEventosLegados) {
       for (const usuario of todosUsuarios || []) {
-        const eventos = eventosPorUsuarioLegado.get(usuario.id) || [];
+        const eventos = eventosPorUsuario.get(usuario.id) || [];
         const porDia = calcularSegundosAtivosPorDia(eventos, inicioSemanaMs, fimSemanaMs, LIMITE_SESSAO_SEGUNDOS);
         for (const [dia, segundos] of Array.from(porDia.entries())) {
           if (!ehDiaUtilUTC(dia)) continue;
@@ -284,18 +319,30 @@ export async function GET(req: NextRequest) {
 
       if (segundosAjuste > 0) {
         horasDoUsuario[diaAjuste] = (horasDoUsuario[diaAjuste] || 0) + segundosAjuste;
+        const chaveCredito = `${registro.user_id}:${diaAjuste}`;
+        creditosPositivosPorDia[chaveCredito] = (creditosPositivosPorDia[chaveCredito] || 0) + segundosAjuste;
         continue;
       }
 
-      // Descontos reduzem primeiro o dia do ajuste; o excedente tira horas
-      // dos dias anteriores da semana, sem permitir saldo negativo.
+      // Um desconto só pode consumir farm e créditos que já existiam quando
+      // o ajuste foi lançado; ele não deve apagar sessões iniciadas depois.
       let restante = Math.abs(segundosAjuste);
+      const instanteAjuste = Date.parse(registro.criado_em || "");
+      const eventosUsuario = eventosPorUsuario.get(registro.user_id) || [];
+      const farmAntesDoAjuste = Number.isFinite(instanteAjuste)
+        ? calcularSegundosAtivosPorDia(eventosUsuario, inicioSemanaMs, instanteAjuste, LIMITE_SESSAO_SEGUNDOS).get(diaAjuste) || 0
+        : 0;
+      const creditosAntesDoAjuste = creditosPositivosPorDia[`${registro.user_id}:${diaAjuste}`] || 0;
+      const disponivelNoDiaDoAjuste = farmAntesDoAjuste + creditosAntesDoAjuste;
       const diasParaDescontar = [
         diaAjuste,
         ...Object.keys(horasDoUsuario).filter((dia) => dia < diaAjuste).sort().reverse(),
       ];
       for (const dia of diasParaDescontar) {
-        const disponivel = Math.max(0, horasDoUsuario[dia] || 0);
+        const saldoDia = Math.max(0, horasDoUsuario[dia] || 0);
+        const disponivel = dia === diaAjuste
+          ? Math.min(saldoDia, disponivelNoDiaDoAjuste)
+          : saldoDia;
         const descontado = Math.min(disponivel, restante);
         horasDoUsuario[dia] = disponivel - descontado;
         restante -= descontado;
