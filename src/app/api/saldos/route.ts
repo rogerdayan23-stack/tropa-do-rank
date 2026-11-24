@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserFromRequest, isManager } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase";
-import { calcularDuracaoSessao, type SessaoRow } from "@/lib/sessao";
+import { calcularDuracaoSessao, LIMITE_SESSAO_SEGUNDOS, type SessaoRow } from "@/lib/sessao";
 import { registrarAuditoria } from "@/lib/audit";
 import { arredondarHorasParaMeiaHora, calcularSegundosAtivosPorDia, calcularTaxaHoraSemana, calcularTotalReceber } from "@/lib/finance.mjs";
 import crypto from "crypto";
@@ -109,6 +109,8 @@ export async function GET(req: NextRequest) {
     const sessoesEncontradas = sessoes || [];
     const idsSessoes = sessoesEncontradas.map((sessao) => sessao.id).filter(Boolean);
     let eventosPorSessao = new Map<string, { acao: string; criado_em: string }[]>();
+    const eventosPorUsuarioLegado = new Map<string, { acao: string; criado_em: string }[]>();
+    let usaEventosLegados = false;
     if (idsSessoes.length > 0) {
       const { data: eventosSessao, error: eventosSessaoError } = await supabase
         .from("logs")
@@ -129,44 +131,73 @@ export async function GET(req: NextRequest) {
           eventosPorSessao.set(evento.sessao_id, lista);
         }
       } else {
-        // Bancos que ainda não receberam a migração não têm sessao_id em logs.
-        // Relaciona os eventos antigos pelo jogador e pelo intervalo da sessão.
-        const userIds = Array.from(new Set(sessoesEncontradas.map((sessao) => sessao.user_id).filter(Boolean)));
+        // No esquema legado, `inicio` muda quando uma sessão é retomada, mas
+        // os eventos anteriores continuam pertencendo à mesma sessão. Recria
+        // a linha do tempo por jogador para não perder esses trechos.
+        usaEventosLegados = true;
+        const userIds = (todosUsuarios || []).map((u) => u.id).filter(Boolean);
         const inicioMaisAntigo = sessoesEncontradas.reduce((maisAntigo, sessao) => {
           const inicio = Date.parse(sessao.inicio || "");
           return Number.isFinite(inicio) ? Math.min(maisAntigo, inicio) : maisAntigo;
-        }, Date.parse(semana.inicioISO));
+        }, Date.parse(semana.inicioISO) - 5 * 60 * 60 * 1000);
 
         if (userIds.length > 0) {
           const { data: eventosLegados, error: eventosLegadosError } = await supabase
             .from("logs")
             .select("user_id,acao,criado_em")
             .in("user_id", userIds)
-            .in("acao", ["iniciar_sessao", "pausar_sessao", "retomar_sessao", "encerrar_sessao", "admin:pausar_sessao", "admin:retomar_sessao"])
+            .in("acao", ["iniciar_sessao", "pausar_sessao", "retomar_sessao", "encerrar_sessao", "admin:pausar_sessao", "admin:retomar_sessao", "admin_reset_user"])
             .gte("criado_em", new Date(inicioMaisAntigo).toISOString())
             .lte("criado_em", semana.fimISO)
             .order("criado_em", { ascending: true });
 
           if (eventosLegadosError) throw eventosLegadosError;
 
-          const sessoesPorFim = [...sessoesEncontradas].sort((a, b) => {
-            const fimA = a.fim ? Date.parse(a.fim) : Number.POSITIVE_INFINITY;
-            const fimB = b.fim ? Date.parse(b.fim) : Number.POSITIVE_INFINITY;
-            return fimA - fimB || Date.parse(b.inicio || "") - Date.parse(a.inicio || "");
-          });
-
           for (const evento of eventosLegados || []) {
             if (!evento.user_id || !evento.criado_em) continue;
-            const instante = Date.parse(evento.criado_em);
-            const sessao = sessoesPorFim.find((candidata) => {
-              const inicio = Date.parse(candidata.inicio || "");
-              const fim = candidata.fim ? Date.parse(candidata.fim) : Number.POSITIVE_INFINITY;
-              return candidata.user_id === evento.user_id && instante >= inicio && instante <= fim;
-            });
-            if (!sessao) continue;
-            const lista = eventosPorSessao.get(sessao.id) || [];
+            const lista = eventosPorUsuarioLegado.get(evento.user_id) || [];
             lista.push({ acao: evento.acao, criado_em: evento.criado_em });
-            eventosPorSessao.set(sessao.id, lista);
+            eventosPorUsuarioLegado.set(evento.user_id, lista);
+          }
+
+          // Inclui o último reset anterior ao período e todos os desta semana:
+          // ele fecha qualquer trecho antigo aberto no histórico legado.
+          const { data: resetsLegados, error: resetsLegadosError } = await supabase
+            .from("logs")
+            .select("user_id,acao,criado_em")
+            .eq("acao", "admin_reset_user")
+            .in("user_id", userIds)
+            .lte("criado_em", semana.fimISO)
+            .order("criado_em", { ascending: true });
+
+          if (resetsLegadosError) throw resetsLegadosError;
+          for (const reset of resetsLegados || []) {
+            if (!reset.user_id || !reset.criado_em) continue;
+            const lista = eventosPorUsuarioLegado.get(reset.user_id) || [];
+            if (!lista.some((evento) => evento.acao === reset.acao && evento.criado_em === reset.criado_em)) {
+              lista.push({ acao: reset.acao, criado_em: reset.criado_em });
+              eventosPorUsuarioLegado.set(reset.user_id, lista);
+            }
+          }
+
+          // Se a sessão foi encerrada ou pausada sem gravar o último evento,
+          // usa o estado persistido para fechar corretamente a contagem.
+          for (const sessao of sessoesEncontradas) {
+            const acaoFinal = sessao.status === "pausada" && !sessao.fim ? "pausar_sessao" : "encerrar_sessao";
+            const horarioFinal = sessao.fim || (sessao.status !== "ativa" ? sessao.ultima_atividade : null);
+            if (!horarioFinal) continue;
+            const lista = eventosPorUsuarioLegado.get(sessao.user_id) || [];
+            const instanteFinal = Date.parse(horarioFinal);
+            const temFinal = lista.some((evento) => {
+              const acao = evento.acao.replace(/^admin:/, "");
+              return ["pausar_sessao", "encerrar_sessao"].includes(acao)
+                && Number.isFinite(Date.parse(evento.criado_em))
+                && Math.abs(Date.parse(evento.criado_em) - instanteFinal) <= 60_000;
+            });
+            if (!temFinal) {
+              lista.push({ acao: acaoFinal, criado_em: horarioFinal });
+              eventosPorUsuarioLegado.set(sessao.user_id, lista);
+            }
           }
         }
       }
@@ -201,30 +232,41 @@ export async function GET(req: NextRequest) {
 
     const inicioSemanaMs = Date.parse(semana.inicioISO);
     const fimSemanaMs = Math.min(Date.parse(semana.fimISO), Date.now());
-    for (const s of (sessoes || [])) {
-      if (!s.user_id || !segundosPorUsuarioPorDia[s.user_id]) continue;
-      const eventos = eventosPorSessao.get(s.id) || [];
-      const primeiroInicio = eventos.find((evento) => evento.acao.replace(/^admin:/, "") === "iniciar_sessao");
-      const inicioOriginalMs = Date.parse(primeiroInicio?.criado_em || s.inicio || "");
-      if (inicioOriginalMs <= (ultimoResetPorUsuario[s.user_id] || 0)) continue;
-
-      if (eventos.length > 0) {
-        const eventosComFim = [...eventos];
-        const temFim = eventos.some((evento) => evento.acao.replace(/^admin:/, "") === "encerrar_sessao");
-        if (s.fim && !temFim) eventosComFim.push({ acao: "encerrar_sessao", criado_em: s.fim });
-        const porDia = calcularSegundosAtivosPorDia(eventosComFim, inicioSemanaMs, fimSemanaMs);
+    if (usaEventosLegados) {
+      for (const usuario of todosUsuarios || []) {
+        const eventos = eventosPorUsuarioLegado.get(usuario.id) || [];
+        const porDia = calcularSegundosAtivosPorDia(eventos, inicioSemanaMs, fimSemanaMs, LIMITE_SESSAO_SEGUNDOS);
         for (const [dia, segundos] of Array.from(porDia.entries())) {
           if (!ehDiaUtilUTC(dia)) continue;
-          segundosPorUsuarioPorDia[s.user_id][dia] = (segundosPorUsuarioPorDia[s.user_id][dia] || 0) + segundos;
+          segundosPorUsuarioPorDia[usuario.id][dia] = (segundosPorUsuarioPorDia[usuario.id][dia] || 0) + segundos;
         }
-        continue;
       }
+    } else {
+      for (const s of (sessoes || [])) {
+        if (!s.user_id || !segundosPorUsuarioPorDia[s.user_id]) continue;
+        const eventos = eventosPorSessao.get(s.id) || [];
+        const primeiroInicio = eventos.find((evento) => evento.acao.replace(/^admin:/, "") === "iniciar_sessao");
+        const inicioOriginalMs = Date.parse(primeiroInicio?.criado_em || s.inicio || "");
+        if (inicioOriginalMs <= (ultimoResetPorUsuario[s.user_id] || 0)) continue;
 
-      // Compatibilidade com sessões antigas sem eventos vinculados.
-      const diaSessao = (s.inicio || "").substring(0, 10);
-      if (!diaSessao || !ehDiaUtilUTC(diaSessao) || diaSessao < semana.inicioStr || diaSessao > semana.fimStr) continue;
-      const segundosDaSessao = Math.max(0, calcularDuracaoSessao(s as SessaoRow));
-      segundosPorUsuarioPorDia[s.user_id][diaSessao] = (segundosPorUsuarioPorDia[s.user_id][diaSessao] || 0) + segundosDaSessao;
+        if (eventos.length > 0) {
+          const eventosComFim = [...eventos];
+          const temFim = eventos.some((evento) => evento.acao.replace(/^admin:/, "") === "encerrar_sessao");
+          if (s.fim && !temFim) eventosComFim.push({ acao: "encerrar_sessao", criado_em: s.fim });
+          const porDia = calcularSegundosAtivosPorDia(eventosComFim, inicioSemanaMs, fimSemanaMs, LIMITE_SESSAO_SEGUNDOS);
+          for (const [dia, segundos] of Array.from(porDia.entries())) {
+            if (!ehDiaUtilUTC(dia)) continue;
+            segundosPorUsuarioPorDia[s.user_id][dia] = (segundosPorUsuarioPorDia[s.user_id][dia] || 0) + segundos;
+          }
+          continue;
+        }
+
+        // Compatibilidade com sessões antigas sem eventos vinculados.
+        const diaSessao = (s.inicio || "").substring(0, 10);
+        if (!diaSessao || !ehDiaUtilUTC(diaSessao) || diaSessao < semana.inicioStr || diaSessao > semana.fimStr) continue;
+        const segundosDaSessao = Math.max(0, calcularDuracaoSessao(s as SessaoRow));
+        segundosPorUsuarioPorDia[s.user_id][diaSessao] = (segundosPorUsuarioPorDia[s.user_id][diaSessao] || 0) + segundosDaSessao;
+      }
     }
 
     for (const registro of (ajustesRows || [])) {
@@ -263,6 +305,7 @@ export async function GET(req: NextRequest) {
 
     // 5. Converte para horas arredondadas de 30 em 30 minutos
     const horasPorUsuarioPorDia: Record<string, Record<string, number>> = {};
+    const horasSemanaPorUsuario: Record<string, number> = {};
     const totalHorasTimePorDia: Record<string, number> = {};
 
     for (const u of (todosUsuarios || [])) {
@@ -273,9 +316,11 @@ export async function GET(req: NextRequest) {
         horasPorUsuarioPorDia[u.id][diaStr] = horasArred;
         totalHorasTimePorDia[diaStr] = (totalHorasTimePorDia[diaStr] || 0) + horasArred;
       }
+      const segundosSemana = Object.values(diasDoUsuario).reduce((total, segundos) => total + segundos, 0);
+      horasSemanaPorUsuario[u.id] = arredondarHorasParaMeiaHora(segundosSemana);
     }
 
-    const totalHorasEquipeSemana = Object.values(totalHorasTimePorDia).reduce((total, horas) => total + horas, 0);
+    const totalHorasEquipeSemana = Object.values(horasSemanaPorUsuario).reduce((total, horas) => total + horas, 0);
     const taxaHoraSemana = calcularTaxaHoraSemana(lucroBrutoSemana, totalHorasEquipeSemana);
 
     // 6. Divide o lucro acumulado da semana pelo total de horas da semana.
@@ -334,14 +379,8 @@ export async function GET(req: NextRequest) {
       const horasDia = horasPorUsuarioPorDia[u.id]?.[dataQuery] || 0;
       const valorDia = ganhosPorUsuarioPorDia[u.id]?.[dataQuery] || 0;
 
-      let horasSemana = 0;
-      for (const h of Object.values(horasPorUsuarioPorDia[u.id] || {})) {
-        horasSemana += h;
-      }
-      let ganhoBrutoSemana = 0;
-      for (const g of Object.values(ganhosPorUsuarioPorDia[u.id] || {})) {
-        ganhoBrutoSemana += g;
-      }
+      const horasSemana = horasSemanaPorUsuario[u.id] || 0;
+      const ganhoBrutoSemana = horasSemana * taxaHoraSemana;
 
       const penalidadesSemana = penalidadesMap[u.id] || 0;
       const totalReceberSemana = calcularTotalReceber(ganhoBrutoSemana, penalidadesSemana);

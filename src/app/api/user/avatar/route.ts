@@ -6,6 +6,15 @@ import { v2 as cloudinary } from "cloudinary";
 const MAX_TAMANHO = 5 * 1024 * 1024;
 const TIPOS_PERMITIDOS = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 
+type CloudinaryApiError = {
+  name?: string;
+  message?: string;
+  http_code?: number;
+  error?: { message?: string };
+  cause?: unknown;
+  stack?: string;
+};
+
 export async function POST(req: NextRequest) {
   try {
     const user = await getUserFromRequest();
@@ -14,9 +23,10 @@ export async function POST(req: NextRequest) {
     }
 
     // 1) Valida as credenciais do Cloudinary antes de tentar o upload
-    const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
-    const apiKey = process.env.CLOUDINARY_API_KEY;
-    const apiSecret = process.env.CLOUDINARY_API_SECRET;
+    const cloudName = process.env.CLOUDINARY_CLOUD_NAME?.trim();
+    const apiKey = process.env.CLOUDINARY_API_KEY?.trim();
+    const apiSecret = process.env.CLOUDINARY_API_SECRET?.trim();
+    const estaNoVercel = process.env.VERCEL === "1" || Boolean(process.env.VERCEL_ENV);
 
     if (!cloudName || !apiKey || !apiSecret) {
       console.error("[AVATAR] Credenciais do Cloudinary ausentes:", {
@@ -27,7 +37,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           error:
-            "Cloudinary não configurado. Verifique CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY e CLOUDINARY_API_SECRET no .env.local",
+            estaNoVercel
+              ? "Upload de fotos indisponível: configure CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY e CLOUDINARY_API_SECRET nas variáveis de ambiente do Vercel para Production e publique um novo deploy."
+              : "Cloudinary não configurado. Verifique CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY e CLOUDINARY_API_SECRET no .env.local.",
         },
         { status: 500 }
       );
@@ -68,7 +80,7 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(bytes);
 
     // 3) Envia para o Cloudinary
-    const uploadResult = await new Promise<any>((resolve, reject) => {
+    const uploadResult = await new Promise<{ secure_url: string }>((resolve, reject) => {
       cloudinary.uploader
         .upload_stream(
           {
@@ -79,7 +91,8 @@ export async function POST(req: NextRequest) {
           },
           (error, result) => {
             if (error) reject(error);
-            else resolve(result);
+            else if (result?.secure_url) resolve({ secure_url: result.secure_url });
+            else reject(new Error("Cloudinary não retornou a URL da imagem."));
           }
         )
         .end(buffer);
@@ -104,30 +117,29 @@ export async function POST(req: NextRequest) {
       message: "Foto de perfil atualizada com sucesso!",
       avatar_url: avatarUrl,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const erroCloudinary: CloudinaryApiError = typeof error === "object" && error !== null
+      ? error as CloudinaryApiError
+      : { message: typeof error === "string" ? error : undefined };
     // Log detalhado para o terminal
     console.error("[AVATAR] Erro no upload de avatar:", {
-      name: error?.name,
-      message: error?.message,
-      http_code: error?.http_code,
-      cloudinary_error: error?.error,
-      cause: error?.cause,
-      stack: error?.stack,
+      name: erroCloudinary.name,
+      message: erroCloudinary.message,
+      http_code: erroCloudinary.http_code,
+      cloudinary_error: erroCloudinary.error,
+      cause: erroCloudinary.cause,
+      stack: erroCloudinary.stack,
     });
-    console.error(error);
 
     // Retorna a mensagem real do Cloudinary (ex.: "api_secret mismatch") para o frontend
-    let mensagem = error?.error?.message || error?.message || "Erro interno ao processar upload";
+    let mensagem = erroCloudinary.error?.message || erroCloudinary.message || "Erro interno ao processar upload";
 
-    // Falha de autenticação do Cloudinary = credencial errada no .env.local
-    if (error?.http_code === 401 || /signature|api_secret|api_key/i.test(mensagem)) {
-      console.error(
-        "[AVATAR] Cloudinary rejeitou as credenciais (HTTP 401). " +
-          "Confira CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY e CLOUDINARY_API_SECRET no .env.local " +
-          "(Cloudinary > Settings > API Keys)."
-      );
-      mensagem =
-        "Cloudinary rejeitou as credenciais. Confira CLOUDINARY_API_SECRET no .env.local (Cloudinary > Settings > API Keys).";
+    // Falha de autenticação do Cloudinary: a orientação depende do ambiente.
+    if (erroCloudinary.http_code === 401 || /signature|api_secret|api_key/i.test(mensagem)) {
+      console.error("[AVATAR] Cloudinary rejeitou as credenciais configuradas para este ambiente (HTTP 401).");
+      mensagem = process.env.VERCEL === "1" || process.env.VERCEL_ENV
+        ? "Cloudinary rejeitou as credenciais do site publicado. Atualize CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY e CLOUDINARY_API_SECRET em Vercel > Settings > Environment Variables para Production e faça um novo deploy. Não compartilhe a chave secreta."
+        : "Cloudinary rejeitou as credenciais locais. Confira CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY e CLOUDINARY_API_SECRET no .env.local (Cloudinary > Settings > API Keys).";
     }
 
     return NextResponse.json({ error: mensagem }, { status: 500 });

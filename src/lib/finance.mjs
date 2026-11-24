@@ -26,15 +26,19 @@ export function calcularTotalReceber(valorBruto, penalidades) {
  * @param {EventoContagem[]} eventos
  * @param {number} desdeMs
  * @param {number} ateMs
+ * @param {number} [limiteTrechoSegundos=Infinity]
  * @returns {Map<string, number>}
  */
-export function calcularSegundosAtivosPorDia(eventos, desdeMs, ateMs) {
+export function calcularSegundosAtivosPorDia(eventos, desdeMs, ateMs, limiteTrechoSegundos = Number.POSITIVE_INFINITY) {
   const dias = new Map();
   let inicioAtivo = null;
+  const limiteTrechoMs = Number.isFinite(limiteTrechoSegundos) && limiteTrechoSegundos > 0
+    ? limiteTrechoSegundos * 1000
+    : Number.POSITIVE_INFINITY;
 
   const somarTrecho = (inicio, fim) => {
     let cursor = Math.max(inicio, desdeMs);
-    const final = Math.min(fim, ateMs);
+    const final = Math.min(fim, ateMs, inicio + limiteTrechoMs);
     while (cursor < final) {
       const data = new Date(cursor);
       const inicioDia = Date.UTC(data.getUTCFullYear(), data.getUTCMonth(), data.getUTCDate());
