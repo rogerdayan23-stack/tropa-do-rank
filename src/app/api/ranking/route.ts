@@ -10,7 +10,7 @@ type Evento = { user_id: string | null; acao: string; criado_em: string };
 const META_SEMANAL_SEGUNDOS = 10 * 60 * 60;
 const ACOES_SESSAO = [
   "iniciar_sessao", "pausar_sessao", "retomar_sessao", "encerrar_sessao",
-  "admin:pausar_sessao", "admin:retomar_sessao",
+  "admin:pausar_sessao", "admin:retomar_sessao", "admin_reset_user",
 ];
 
 function inicioPeriodo(tipo: Exclude<Periodo, "geral">, agora: Date) {
@@ -35,9 +35,37 @@ function acumularEventos(eventos: Evento[], ate: number, desde: number) {
 
   const porJogador = new Map<string, Map<string, number>>();
   eventosPorJogador.forEach((lista, id) => {
-    porJogador.set(id, calcularSegundosAtivosPorDia(lista, desde, ate));
+    const ultimoReset = lista.reduce((maisRecente, evento) => {
+      if (evento.acao !== "admin_reset_user") return maisRecente;
+      const instante = new Date(evento.criado_em).getTime();
+      return Number.isFinite(instante) ? Math.max(maisRecente, instante) : maisRecente;
+    }, Number.NEGATIVE_INFINITY);
+    const inicioEfetivo = Math.max(desde, ultimoReset);
+    porJogador.set(id, calcularSegundosAtivosPorDia(lista, inicioEfetivo, ate));
   });
   return porJogador;
+}
+
+function completarEncerramentos(eventos: Evento[], sessoes: SessaoRow[]): Evento[] {
+  const completos = [...eventos];
+  for (const sessao of sessoes) {
+    if (!sessao.user_id || !sessao.fim) continue;
+    const fimMs = Date.parse(sessao.fim);
+    if (!Number.isFinite(fimMs)) continue;
+
+    const temEncerramento = completos.some((evento) => {
+      if (evento.user_id !== sessao.user_id || evento.acao.replace(/^admin:/, "") !== "encerrar_sessao") return false;
+      const eventoMs = Date.parse(evento.criado_em);
+      return Number.isFinite(eventoMs) && Math.abs(eventoMs - fimMs) <= 60_000;
+    });
+
+    // Versões antigas não gravavam o encerramento do jogador quando um admin
+    // encerrava uma sessão. A própria sessão mantém o horário final correto.
+    if (!temEncerramento) {
+      completos.push({ user_id: sessao.user_id, acao: "encerrar_sessao", criado_em: sessao.fim });
+    }
+  }
+  return completos;
 }
 
 function sequenciaAtual(dias: Map<string, number>, agora: Date) {
@@ -89,10 +117,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Não foi possível carregar a classificação" }, { status: 500 });
   }
 
-  const diasRecentes = acumularEventos((eventos || []) as Evento[], agoraMs, agoraMs - 90 * 24 * 60 * 60 * 1000);
-  const deSemana = acumularEventos((eventos || []) as Evento[], Math.min(fimSemana.getTime(), agoraMs), inicioSemana.getTime());
+  const eventosCompletos = completarEncerramentos((eventos || []) as Evento[], (sessoes || []) as SessaoRow[]);
+  const diasRecentes = acumularEventos(eventosCompletos, agoraMs, agoraMs - 90 * 24 * 60 * 60 * 1000);
+  const deSemana = acumularEventos(eventosCompletos, Math.min(fimSemana.getTime(), agoraMs), inicioSemana.getTime());
   const dePeriodo = inicioSelecionado && fimSelecionado
-    ? acumularEventos((eventos || []) as Evento[], Math.min(fimSelecionado.getTime(), agoraMs), inicioSelecionado.getTime())
+    ? acumularEventos(eventosCompletos, Math.min(fimSelecionado.getTime(), agoraMs), inicioSelecionado.getTime())
     : null;
 
   const recordes = new Map<string, number>();

@@ -109,7 +109,7 @@ export async function GET(req: NextRequest) {
         .from("logs")
         .select("sessao_id,acao,criado_em")
         .in("sessao_id", idsSessoes)
-        .in("acao", ["iniciar_sessao", "pausar_sessao", "retomar_sessao", "encerrar_sessao", "admin:pausar_sessao", "admin:retomar_sessao", "admin:encerrar_sessao"])
+        .in("acao", ["iniciar_sessao", "pausar_sessao", "retomar_sessao", "encerrar_sessao", "admin:pausar_sessao", "admin:retomar_sessao"])
         .lte("criado_em", semana.fimISO)
         .order("criado_em", { ascending: true });
 
@@ -137,7 +137,7 @@ export async function GET(req: NextRequest) {
             .from("logs")
             .select("user_id,acao,criado_em")
             .in("user_id", userIds)
-            .in("acao", ["iniciar_sessao", "pausar_sessao", "retomar_sessao", "encerrar_sessao", "admin:pausar_sessao", "admin:retomar_sessao", "admin:encerrar_sessao"])
+            .in("acao", ["iniciar_sessao", "pausar_sessao", "retomar_sessao", "encerrar_sessao", "admin:pausar_sessao", "admin:retomar_sessao"])
             .gte("criado_em", new Date(inicioMaisAntigo).toISOString())
             .lte("criado_em", semana.fimISO)
             .order("criado_em", { ascending: true });

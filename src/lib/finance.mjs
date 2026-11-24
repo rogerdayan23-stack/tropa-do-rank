@@ -55,7 +55,7 @@ export function calcularSegundosAtivosPorDia(eventos, desdeMs, ateMs) {
     if (acao === "iniciar_sessao" || acao === "retomar_sessao") {
       if (inicioAtivo !== null) somarTrecho(inicioAtivo, instante);
       inicioAtivo = instante;
-    } else if (acao === "pausar_sessao" || acao === "encerrar_sessao") {
+    } else if (acao === "pausar_sessao" || acao === "encerrar_sessao" || acao === "admin_reset_user") {
       if (inicioAtivo !== null) somarTrecho(inicioAtivo, instante);
       inicioAtivo = null;
     }
