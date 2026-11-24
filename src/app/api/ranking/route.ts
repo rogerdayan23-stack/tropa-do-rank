@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserFromRequest } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase";
-import { calcularDuracaoSessao, type SessaoRow } from "@/lib/sessao";
+import { calcularDuracaoSessao, LIMITE_SESSAO_SEGUNDOS, type SessaoRow } from "@/lib/sessao";
 import { calcularSegundosAtivosPorDia } from "@/lib/finance.mjs";
 
 type Periodo = "semana" | "mes" | "geral";
@@ -58,12 +58,16 @@ function acumularEventos(eventos: Evento[], ate: number, desde: number) {
 function completarEncerramentos(eventos: Evento[], sessoes: SessaoRow[]): Evento[] {
   const completos = [...eventos];
   for (const sessao of sessoes) {
-    if (!sessao.user_id || !sessao.fim) continue;
-    const fimMs = Date.parse(sessao.fim);
+    if (!sessao.user_id) continue;
+    const acaoFinal = sessao.status === "pausada" && !sessao.fim ? "pausar_sessao" : "encerrar_sessao";
+    const horarioFinal = sessao.fim || (sessao.status !== "ativa" ? sessao.ultima_atividade : null);
+    if (!horarioFinal) continue;
+    const fimMs = Date.parse(horarioFinal);
     if (!Number.isFinite(fimMs)) continue;
 
     const temEncerramento = completos.some((evento) => {
-      if (evento.user_id !== sessao.user_id || evento.acao.replace(/^admin:/, "") !== "encerrar_sessao") return false;
+      const acao = evento.acao.replace(/^admin:/, "");
+      if (evento.user_id !== sessao.user_id || !["pausar_sessao", "encerrar_sessao"].includes(acao)) return false;
       const eventoMs = Date.parse(evento.criado_em);
       return Number.isFinite(eventoMs) && Math.abs(eventoMs - fimMs) <= 60_000;
     });
@@ -71,10 +75,46 @@ function completarEncerramentos(eventos: Evento[], sessoes: SessaoRow[]): Evento
     // Versões antigas não gravavam o encerramento do jogador quando um admin
     // encerrava uma sessão. A própria sessão mantém o horário final correto.
     if (!temEncerramento) {
-      completos.push({ user_id: sessao.user_id, acao: "encerrar_sessao", criado_em: sessao.fim });
+      completos.push({ user_id: sessao.user_id, acao: acaoFinal, criado_em: horarioFinal });
     }
   }
-  return completos;
+
+  // Protege históricos legados sem sessão associada: nenhum trecho ativo pode
+  // ultrapassar o limite máximo permitido para uma sessão.
+  const porJogador = new Map<string, Evento[]>();
+  for (const evento of completos) {
+    if (!evento.user_id) continue;
+    const lista = porJogador.get(evento.user_id) || [];
+    lista.push(evento);
+    porJogador.set(evento.user_id, lista);
+  }
+  const encerramentosAutomaticos: Evento[] = [];
+  const limiteMs = LIMITE_SESSAO_SEGUNDOS * 1000;
+  const agoraMs = Date.now();
+  porJogador.forEach((lista, userId) => {
+    let inicioAtivo: number | null = null;
+    const ordenados = [...lista].sort((a, b) => Date.parse(a.criado_em) - Date.parse(b.criado_em));
+    for (const evento of ordenados) {
+      const acao = evento.acao.replace(/^admin:/, "");
+      const instante = Date.parse(evento.criado_em);
+      if (!Number.isFinite(instante)) continue;
+      if (acao === "iniciar_sessao" || acao === "retomar_sessao") {
+        if (inicioAtivo !== null && instante - inicioAtivo >= limiteMs) {
+          encerramentosAutomaticos.push({ user_id: userId, acao: "encerrar_sessao", criado_em: new Date(inicioAtivo + limiteMs).toISOString() });
+        }
+        inicioAtivo = instante;
+      } else if (["pausar_sessao", "encerrar_sessao", "admin_reset_user"].includes(acao)) {
+        if (inicioAtivo !== null && instante - inicioAtivo >= limiteMs) {
+          encerramentosAutomaticos.push({ user_id: userId, acao: "encerrar_sessao", criado_em: new Date(inicioAtivo + limiteMs).toISOString() });
+        }
+        inicioAtivo = null;
+      }
+    }
+    if (inicioAtivo !== null && agoraMs - inicioAtivo >= limiteMs) {
+      encerramentosAutomaticos.push({ user_id: userId, acao: "encerrar_sessao", criado_em: new Date(inicioAtivo + limiteMs).toISOString() });
+    }
+  });
+  return [...completos, ...encerramentosAutomaticos];
 }
 
 function sequenciaAtual(dias: Map<string, number>, agora: Date) {
@@ -134,19 +174,26 @@ export async function GET(req: NextRequest) {
     : null;
 
   const recordes = new Map<string, number>();
+  const sessoesEmAberto = new Map<string, number>();
   for (const sessao of (sessoes || []) as SessaoRow[]) {
-    const duracao = calcularDuracaoSessao(sessao);
+    const duracao = Math.min(LIMITE_SESSAO_SEGUNDOS, calcularDuracaoSessao(sessao));
     recordes.set(sessao.user_id, Math.max(recordes.get(sessao.user_id) || 0, duracao));
+    if (["ativa", "pausada"].includes(sessao.status)) {
+      const atual = sessoesEmAberto.get(sessao.user_id) || 0;
+      sessoesEmAberto.set(sessao.user_id, atual + Math.min(LIMITE_SESSAO_SEGUNDOS, duracao));
+    }
   }
 
   const ranking = (usuarios || []).map((jogador) => {
     const dias = diasRecentes.get(jogador.id) || new Map<string, number>();
     const diasSemana = deSemana.get(jogador.id) || new Map<string, number>();
     const diasPeriodo = dePeriodo?.get(jogador.id) || new Map<string, number>();
+    const totalGeral = Number(jogador.total_segundos || 0);
+    const totalSemanaCalculado = somarHorasDiasUteis(diasPeriodo);
     const totalSelecionado = tipo === "geral"
-      ? Number(jogador.total_segundos || 0)
+      ? totalGeral
       : tipo === "semana"
-        ? somarHorasDiasUteis(diasPeriodo)
+        ? Math.min(totalSemanaCalculado, totalGeral + (sessoesEmAberto.get(jogador.id) || 0))
         : Array.from(diasPeriodo.values()).reduce((total, segundos) => total + segundos, 0);
     const horasMeta = somarHorasDiasUteis(diasSemana);
     return {

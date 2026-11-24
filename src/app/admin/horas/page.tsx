@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Activity, Clock3, Loader2, RefreshCw, UserRound } from "lucide-react";
 import { toast } from "sonner";
+import { LIMITE_SESSAO_SEGUNDOS } from "@/lib/sessao";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -76,8 +77,13 @@ export default function RegistroHorasPage() {
         }
       }
       const ultima = ordenados[ordenados.length - 1];
-      const emAndamento = ultima?.acao === "iniciar_sessao" || ultima?.acao === "retomar_sessao";
-      const trechoAtual = emAndamento && trechoInicio !== null && agora !== null ? Math.max(0, Math.floor((agora - trechoInicio) / 1000)) : 0;
+      const temTrechoAberto = ultima?.acao === "iniciar_sessao" || ultima?.acao === "retomar_sessao";
+      const trechoDecorrido = temTrechoAberto && trechoInicio !== null && agora !== null
+        ? Math.max(0, Math.floor((agora - trechoInicio) / 1000))
+        : 0;
+      const limiteAtingido = temTrechoAberto && trechoDecorrido >= LIMITE_SESSAO_SEGUNDOS;
+      const emAndamento = temTrechoAberto && !limiteAtingido;
+      const trechoAtual = Math.min(trechoDecorrido, LIMITE_SESSAO_SEGUNDOS);
       return {
         id,
         jogador: ultima?.jogador || "Jogador",
@@ -88,6 +94,7 @@ export default function RegistroHorasPage() {
         totalSegundos: totalSegundos + trechoAtual,
         duracaoPorEvento,
         trechoAtual,
+        limiteAtingido,
       };
     }).sort((a, b) => new Date(b.ultima?.criado_em || 0).getTime() - new Date(a.ultima?.criado_em || 0).getTime());
   }, [eventos, agora]);
@@ -157,10 +164,11 @@ export default function RegistroHorasPage() {
                     const tipo = tipoEvento[evento.acao];
                     const segundosTrecho = grupo.duracaoPorEvento.get(evento.id);
                     const trechoAtivo = grupo.emAndamento && evento.id === grupo.ultima?.id;
+                    const trechoLimitado = grupo.limiteAtingido && evento.id === grupo.ultima?.id;
                     return (
                       <li key={evento.id} className="relative flex flex-col gap-2 pl-5 text-sm before:absolute before:bottom-[-12px] before:left-[5px] before:top-2 before:w-px before:bg-border/70 last:before:hidden sm:flex-row sm:items-center sm:justify-between">
                         <span className="absolute left-0 top-1.5 h-2.5 w-2.5 rounded-full bg-rose-300 ring-4 ring-rose-300/10" />
-                        <div className="flex flex-wrap items-center gap-2"><Badge variant="outline" className={tipo.className}>{tipo.label}</Badge>{typeof segundosTrecho === "number" && <span className="text-xs text-muted-foreground">Trecho ativo: {duracao(segundosTrecho)}</span>}{trechoAtivo && <span className="text-xs text-emerald-200">Trecho atual: {duracao(grupo.trechoAtual)}</span>}</div>
+                        <div className="flex flex-wrap items-center gap-2"><Badge variant="outline" className={tipo.className}>{tipo.label}</Badge>{typeof segundosTrecho === "number" && <span className="text-xs text-muted-foreground">Trecho ativo: {duracao(segundosTrecho)}</span>}{trechoAtivo && <span className="text-xs text-emerald-200">Trecho atual: {duracao(grupo.trechoAtual)}</span>}{trechoLimitado && <span className="text-xs text-amber-200">Limite de sessão atingido: {duracao(grupo.trechoAtual)}</span>}</div>
                         <time className="inline-flex shrink-0 items-center gap-2 text-xs tabular-nums text-muted-foreground"><Clock3 size={14} />{dataHora(evento.criado_em)}</time>
                       </li>
                     );

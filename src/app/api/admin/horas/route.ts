@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { getUserFromRequest, isManager } from "@/lib/auth";
+import { LIMITE_SESSAO_SEGUNDOS } from "@/lib/sessao";
 
 const PAGE_SIZE = 50;
 const ACOES_CONTAGEM = [
@@ -85,6 +86,55 @@ export async function GET(req: NextRequest) {
           });
         }
       }
+    }
+  }
+
+  const idsSessoes = Array.from(new Set(eventos.map((evento) => evento.sessao_id).filter(Boolean))) as string[];
+  let sessoes: { id: string; user_id: string; status: string; fim: string | null; ultima_atividade: string | null }[] = [];
+  if (idsSessoes.length > 0) {
+    const consultaSessoes = await supabase
+      .from("sessoes")
+      .select("id,user_id,status,fim,ultima_atividade")
+      .in("id", idsSessoes);
+    if (consultaSessoes.error) consultaError = consultaSessoes.error;
+    else sessoes = consultaSessoes.data || [];
+  }
+
+  if (!consultaError) {
+    const agora = Date.now();
+    for (const sessao of sessoes) {
+      const daSessao = eventos
+        .filter((evento) => evento.sessao_id === sessao.id)
+        .sort((a, b) => Date.parse(a.criado_em) - Date.parse(b.criado_em));
+      const ultima = daSessao[daSessao.length - 1];
+      if (!ultima) continue;
+
+      const acaoUltima = ultima.acao.replace(/^admin:/, "");
+      let acaoFinal: "pausar_sessao" | "encerrar_sessao" | null = null;
+      let criadoEmFinal: string | null = null;
+
+      if (sessao.status === "pausada" && acaoUltima !== "pausar_sessao") {
+        acaoFinal = "pausar_sessao";
+        criadoEmFinal = sessao.ultima_atividade;
+      } else if (["encerrada", "expirada"].includes(sessao.status) && acaoUltima !== "encerrar_sessao") {
+        acaoFinal = "encerrar_sessao";
+        criadoEmFinal = sessao.fim || sessao.ultima_atividade;
+      } else if (sessao.status === "ativa" && ["iniciar_sessao", "retomar_sessao"].includes(acaoUltima)) {
+        const inicioAtivo = Date.parse(ultima.criado_em);
+        if (Number.isFinite(inicioAtivo) && agora - inicioAtivo >= LIMITE_SESSAO_SEGUNDOS * 1000) {
+          acaoFinal = "encerrar_sessao";
+          criadoEmFinal = new Date(inicioAtivo + LIMITE_SESSAO_SEGUNDOS * 1000).toISOString();
+        }
+      }
+
+      if (!acaoFinal || !criadoEmFinal || Date.parse(criadoEmFinal) <= Date.parse(ultima.criado_em)) continue;
+      eventos.push({
+        id: `sintetico-${sessao.id}-${acaoFinal}`,
+        user_id: sessao.user_id,
+        sessao_id: sessao.id,
+        acao: acaoFinal,
+        criado_em: criadoEmFinal,
+      });
     }
   }
 
