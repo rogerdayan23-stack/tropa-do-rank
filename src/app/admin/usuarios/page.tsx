@@ -60,7 +60,7 @@ function formatDate(iso: string) {
 const estiloRole: Record<string, { label: string; className: string; icone: typeof Crown }> = {
   admin: {
     label: "Admin Master",
-    className: "border-violet-300/35 bg-violet-300/10 text-violet-200",
+    className: "border-rose-300/35 bg-rose-300/10 text-rose-200",
     icone: Crown,
   },
   moderador: {
@@ -315,7 +315,7 @@ export default function UsuariosAdminPage() {
           <Badge variant="outline" className="border-border/60 gap-1.5 px-3 py-1">
             <Users size={12} /> {users.length} usuários
           </Badge>
-          <Badge variant="outline" className="border-violet-300/35 gap-1.5 px-3 py-1 text-violet-200">
+          <Badge variant="outline" className="border-rose-300/35 gap-1.5 px-3 py-1 text-rose-200">
             <Crown size={12} /> {totalAdmins} admins
           </Badge>
           <Badge variant="outline" className="border-cyan-400/35 gap-1.5 px-3 py-1 text-cyan-200">
@@ -417,7 +417,7 @@ export default function UsuariosAdminPage() {
                                   disabled={souEu}
                                   onClick={() => zerar(u)}
                                   title="Zerar horas e saldos"
-                                  className="h-8 gap-1.5 border-violet-300/25 px-2.5 text-[11px] text-violet-200 hover:bg-violet-300/10 hover:text-violet-100"
+                                  className="h-8 gap-1.5 border-rose-300/25 px-2.5 text-[11px] text-rose-200 hover:bg-rose-300/10 hover:text-rose-100"
                                 >
                                   <RotateCcw size={13} />
                                   Zerar
@@ -430,7 +430,7 @@ export default function UsuariosAdminPage() {
                                     disabled={souEu}
                                     onClick={() => togglarRole(u, "admin")}
                                     title={u.role === "admin" ? 'Remover Admin Master' : 'Tornar Admin Master'}
-                                    className="h-8 gap-1.5 border-violet-300/30 px-2.5 text-[11px] text-violet-200 hover:bg-violet-300/10 hover:text-violet-100"
+                                    className="h-8 gap-1.5 border-rose-300/30 px-2.5 text-[11px] text-rose-200 hover:bg-rose-300/10 hover:text-rose-100"
                                   >
                                     {u.role === "admin" ? (
                                       <>

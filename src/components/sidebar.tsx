@@ -119,8 +119,8 @@ export function Sidebar() {
     <div className="flex flex-col h-full">
       {/* Logo */}
       <div className="flex items-center gap-3 px-4 py-5 border-b border-border/40">
-        <div className="relative flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border border-violet-300/35 bg-gradient-to-br from-violet-500/25 to-cyan-400/10 shadow-[0_0_20px_rgba(139,92,246,0.15)]">
-          <Crown size={21} strokeWidth={2.2} className="text-violet-200" />
+        <div className="relative flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border border-rose-300/35 bg-gradient-to-br from-rose-500/25 to-amber-200/10 shadow-[0_0_20px_rgba(236,72,126,0.15)]">
+          <Crown size={21} strokeWidth={2.2} className="text-rose-200" />
         </div>
         <div className="min-w-0">
           <p className="whitespace-nowrap text-[11px] font-black tracking-[0.08em] text-foreground">RANK DOS CUIUDOS</p>

@@ -3,6 +3,7 @@ import { getUserFromRequest, isManager } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase";
 import { calcularDuracaoSessao, type SessaoRow } from "@/lib/sessao";
 import { registrarAuditoria } from "@/lib/audit";
+import { arredondarHorasParaMeiaHora, calcularSegundosAtivosPorDia, calcularTaxaHoraSemana, calcularTotalReceber } from "@/lib/finance.mjs";
 import crypto from "crypto";
 
 function lerAjusteManualEmSegundos(detalhe: string | null): number {
@@ -18,6 +19,10 @@ function lerAjusteManualEmSegundos(detalhe: string | null): number {
   if (totais) return (Number(totais[2]) || 0) - (Number(totais[1]) || 0);
 
   return 0;
+}
+
+function colunaSessaoAusente(error: { code?: string; message?: string } | null): boolean {
+  return (error?.code === "42703" || error?.code === "PGRST204") && /sessao_id/i.test(error.message || "");
 }
 
 function getIntervaloSemana(dataStr: string) {
@@ -87,14 +92,80 @@ export async function GET(req: NextRequest) {
     const valorLucroDia = lucroPorDiaMap[dataQuery] || 0;
     const lucroBrutoSemana = (lucrosSemanaRows || []).reduce((acc, row) => acc + row.valor_total, 0);
 
-    // 3. Busca sessões da semana no Supabase (tabela sessoes)
+    // 3. Busca sessões que cruzaram o período e seus eventos de contagem.
     const { data: sessoes, error: sessoesErr } = await supabase
       .from("sessoes")
-      .select("*")
-      .gte("inicio", semana.inicioISO)
-      .lte("inicio", semana.fimISO);
+      .select("id,user_id,inicio,fim,status,segundos_acumulados,ultima_atividade")
+      .lte("inicio", semana.fimISO)
+      .or(`fim.is.null,fim.gte.${semana.inicioISO}`);
 
     if (sessoesErr) throw sessoesErr;
+
+    const sessoesEncontradas = sessoes || [];
+    const idsSessoes = sessoesEncontradas.map((sessao) => sessao.id).filter(Boolean);
+    let eventosPorSessao = new Map<string, { acao: string; criado_em: string }[]>();
+    if (idsSessoes.length > 0) {
+      const { data: eventosSessao, error: eventosSessaoError } = await supabase
+        .from("logs")
+        .select("sessao_id,acao,criado_em")
+        .in("sessao_id", idsSessoes)
+        .in("acao", ["iniciar_sessao", "pausar_sessao", "retomar_sessao", "encerrar_sessao", "admin:pausar_sessao", "admin:retomar_sessao", "admin:encerrar_sessao"])
+        .lte("criado_em", semana.fimISO)
+        .order("criado_em", { ascending: true });
+
+      if (eventosSessaoError && !colunaSessaoAusente(eventosSessaoError)) throw eventosSessaoError;
+
+      eventosPorSessao = new Map();
+      if (!eventosSessaoError) {
+        for (const evento of eventosSessao || []) {
+          if (!evento.sessao_id) continue;
+          const lista = eventosPorSessao.get(evento.sessao_id) || [];
+          lista.push({ acao: evento.acao, criado_em: evento.criado_em });
+          eventosPorSessao.set(evento.sessao_id, lista);
+        }
+      } else {
+        // Bancos que ainda não receberam a migração não têm sessao_id em logs.
+        // Relaciona os eventos antigos pelo jogador e pelo intervalo da sessão.
+        const userIds = Array.from(new Set(sessoesEncontradas.map((sessao) => sessao.user_id).filter(Boolean)));
+        const inicioMaisAntigo = sessoesEncontradas.reduce((maisAntigo, sessao) => {
+          const inicio = Date.parse(sessao.inicio || "");
+          return Number.isFinite(inicio) ? Math.min(maisAntigo, inicio) : maisAntigo;
+        }, Date.parse(semana.inicioISO));
+
+        if (userIds.length > 0) {
+          const { data: eventosLegados, error: eventosLegadosError } = await supabase
+            .from("logs")
+            .select("user_id,acao,criado_em")
+            .in("user_id", userIds)
+            .in("acao", ["iniciar_sessao", "pausar_sessao", "retomar_sessao", "encerrar_sessao", "admin:pausar_sessao", "admin:retomar_sessao", "admin:encerrar_sessao"])
+            .gte("criado_em", new Date(inicioMaisAntigo).toISOString())
+            .lte("criado_em", semana.fimISO)
+            .order("criado_em", { ascending: true });
+
+          if (eventosLegadosError) throw eventosLegadosError;
+
+          const sessoesPorFim = [...sessoesEncontradas].sort((a, b) => {
+            const fimA = a.fim ? Date.parse(a.fim) : Number.POSITIVE_INFINITY;
+            const fimB = b.fim ? Date.parse(b.fim) : Number.POSITIVE_INFINITY;
+            return fimA - fimB || Date.parse(b.inicio || "") - Date.parse(a.inicio || "");
+          });
+
+          for (const evento of eventosLegados || []) {
+            if (!evento.user_id || !evento.criado_em) continue;
+            const instante = Date.parse(evento.criado_em);
+            const sessao = sessoesPorFim.find((candidata) => {
+              const inicio = Date.parse(candidata.inicio || "");
+              const fim = candidata.fim ? Date.parse(candidata.fim) : Number.POSITIVE_INFINITY;
+              return candidata.user_id === evento.user_id && instante >= inicio && instante <= fim;
+            });
+            if (!sessao) continue;
+            const lista = eventosPorSessao.get(sessao.id) || [];
+            lista.push({ acao: evento.acao, criado_em: evento.criado_em });
+            eventosPorSessao.set(sessao.id, lista);
+          }
+        }
+      }
+    }
 
     // Ajustes feitos pelo Admin Master também são horas do período financeiro.
     // Eles ficam no log de auditoria, então não dependem de uma tabela nova.
@@ -123,12 +194,29 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    const inicioSemanaMs = Date.parse(semana.inicioISO);
+    const fimSemanaMs = Math.min(Date.parse(semana.fimISO), Date.now());
     for (const s of (sessoes || [])) {
       if (!s.user_id || !segundosPorUsuarioPorDia[s.user_id]) continue;
-      const inicioMs = new Date(s.inicio || "").getTime();
-      if (inicioMs <= (ultimoResetPorUsuario[s.user_id] || 0)) continue;
+      const eventos = eventosPorSessao.get(s.id) || [];
+      const primeiroInicio = eventos.find((evento) => evento.acao.replace(/^admin:/, "") === "iniciar_sessao");
+      const inicioOriginalMs = Date.parse(primeiroInicio?.criado_em || s.inicio || "");
+      if (inicioOriginalMs <= (ultimoResetPorUsuario[s.user_id] || 0)) continue;
+
+      if (eventos.length > 0) {
+        const eventosComFim = [...eventos];
+        const temFim = eventos.some((evento) => evento.acao.replace(/^admin:/, "") === "encerrar_sessao");
+        if (s.fim && !temFim) eventosComFim.push({ acao: "encerrar_sessao", criado_em: s.fim });
+        const porDia = calcularSegundosAtivosPorDia(eventosComFim, inicioSemanaMs, fimSemanaMs);
+        for (const [dia, segundos] of Array.from(porDia.entries())) {
+          segundosPorUsuarioPorDia[s.user_id][dia] = (segundosPorUsuarioPorDia[s.user_id][dia] || 0) + segundos;
+        }
+        continue;
+      }
+
+      // Compatibilidade com sessões antigas sem eventos vinculados.
       const diaSessao = (s.inicio || "").substring(0, 10);
-      if (!diaSessao) continue;
+      if (!diaSessao || diaSessao < semana.inicioStr || diaSessao > semana.fimStr) continue;
       const segundosDaSessao = Math.max(0, calcularDuracaoSessao(s as SessaoRow));
       segundosPorUsuarioPorDia[s.user_id][diaSessao] = (segundosPorUsuarioPorDia[s.user_id][diaSessao] || 0) + segundosDaSessao;
     }
@@ -175,14 +263,17 @@ export async function GET(req: NextRequest) {
       horasPorUsuarioPorDia[u.id] = {};
       const diasDoUsuario = segundosPorUsuarioPorDia[u.id] || {};
       for (const [diaStr, segs] of Object.entries(diasDoUsuario)) {
-        const blocos = Math.round(segs / 1800);
-        const horasArred = blocos * 0.5;
+        const horasArred = arredondarHorasParaMeiaHora(segs);
         horasPorUsuarioPorDia[u.id][diaStr] = horasArred;
         totalHorasTimePorDia[diaStr] = (totalHorasTimePorDia[diaStr] || 0) + horasArred;
       }
     }
 
-    // 6. Calcula taxa por hora e ganhos diários
+    const totalHorasEquipeSemana = Object.values(totalHorasTimePorDia).reduce((total, horas) => total + horas, 0);
+    const taxaHoraSemana = calcularTaxaHoraSemana(lucroBrutoSemana, totalHorasEquipeSemana);
+
+    // 6. Divide o lucro acumulado da semana pelo total de horas da semana.
+    // Assim, lucro lançado em um dia sem sessões também entra no rateio semanal.
     const ganhosPorUsuarioPorDia: Record<string, Record<string, number>> = {};
     for (const u of (todosUsuarios || [])) {
       ganhosPorUsuarioPorDia[u.id] = {};
@@ -193,13 +284,9 @@ export async function GET(req: NextRequest) {
     );
 
     for (const diaStr of todasDatas) {
-      const lucroDaqueleDia = lucroPorDiaMap[diaStr] || 0;
-      const totalHorasDaqueleDia = totalHorasTimePorDia[diaStr] || 0;
-      const taxaDaqueleDia = totalHorasDaqueleDia > 0 && lucroDaqueleDia > 0 ? lucroDaqueleDia / totalHorasDaqueleDia : 0;
-
       for (const u of (todosUsuarios || [])) {
         const h = horasPorUsuarioPorDia[u.id]?.[diaStr] || 0;
-        ganhosPorUsuarioPorDia[u.id][diaStr] = h * taxaDaqueleDia;
+        ganhosPorUsuarioPorDia[u.id][diaStr] = h * taxaHoraSemana;
       }
     }
 
@@ -235,11 +322,9 @@ export async function GET(req: NextRequest) {
     }
 
     // 9. Monta lista consolidada
-    let totalHorasEquipeSemana = 0;
     const totalHorasDia = totalHorasTimePorDia[dataQuery] || 0;
-    const taxaHoraDia = totalHorasDia > 0 && valorLucroDia > 0 ? valorLucroDia / totalHorasDia : 0;
 
-    const jogadores = (todosUsuarios || []).map((u: any) => {
+    const jogadores = (todosUsuarios || []).map((u: { id: string; username: string; avatar_url: string | null }) => {
       const horasDia = horasPorUsuarioPorDia[u.id]?.[dataQuery] || 0;
       const valorDia = ganhosPorUsuarioPorDia[u.id]?.[dataQuery] || 0;
 
@@ -247,15 +332,13 @@ export async function GET(req: NextRequest) {
       for (const h of Object.values(horasPorUsuarioPorDia[u.id] || {})) {
         horasSemana += h;
       }
-      totalHorasEquipeSemana += horasSemana;
-
       let ganhoBrutoSemana = 0;
       for (const g of Object.values(ganhosPorUsuarioPorDia[u.id] || {})) {
         ganhoBrutoSemana += g;
       }
 
       const penalidadesSemana = penalidadesMap[u.id] || 0;
-      const totalReceberSemana = Math.max(0, ganhoBrutoSemana - penalidadesSemana);
+      const totalReceberSemana = calcularTotalReceber(ganhoBrutoSemana, penalidadesSemana);
 
       return {
         id: u.id,
@@ -269,6 +352,17 @@ export async function GET(req: NextRequest) {
         total_receber_semana: Number(totalReceberSemana.toFixed(2)),
         pago: pagamentosMap[u.id]?.pago || false,
         pago_em: pagamentosMap[u.id]?.pago_em || null,
+      };
+    });
+
+    const diasSemana = Array.from({ length: 7 }, (_, indice) => {
+      const data = new Date(`${semana.inicioStr}T12:00:00.000Z`);
+      data.setUTCDate(data.getUTCDate() + indice);
+      const chave = data.toISOString().slice(0, 10);
+      return {
+        data: chave,
+        lucro_total: Number((lucroPorDiaMap[chave] || 0).toFixed(2)),
+        horas_total: Number((totalHorasTimePorDia[chave] || 0).toFixed(2)),
       };
     });
 
@@ -290,17 +384,19 @@ export async function GET(req: NextRequest) {
         data_fim: semana.fimStr,
         lucro_bruto_semana: Number(lucroBrutoSemana.toFixed(2)),
         total_horas_equipe_semana: totalHorasEquipeSemana,
+        taxa_hora_semana: Number(taxaHoraSemana.toFixed(2)),
         fechada: !!fechamento,
       },
       dia_selecionado: {
         data: dataQuery,
         lucro_dia: valorLucroDia,
         total_horas_dia: totalHorasDia,
-        taxa_hora_dia: Number(taxaHoraDia.toFixed(2)),
+        taxa_hora_semana: Number(taxaHoraSemana.toFixed(2)),
       },
+      dias: diasSemana,
       jogadores,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Erro ao calcular saldos:", error);
     return NextResponse.json({ error: "Erro interno ao calcular saldos" }, { status: 500 });
   }
@@ -359,9 +455,8 @@ export async function POST(req: NextRequest) {
       data,
       valor_total: valorNum,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Erro ao registrar lucro diário:", error);
     return NextResponse.json({ error: "Erro interno ao salvar lucro diário" }, { status: 500 });
   }
 }
-

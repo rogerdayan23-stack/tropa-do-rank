@@ -67,13 +67,13 @@ const estiloPodio: Record<
   }
 > = {
   1: {
-    borda: "border-violet-300/55",
-    fundo: "bg-gradient-to-b from-violet-400/20 via-indigo-500/5 to-transparent",
-    texto: "text-violet-200",
+    borda: "border-rose-300/55",
+    fundo: "bg-gradient-to-b from-rose-400/20 via-rose-500/5 to-transparent",
+    texto: "text-rose-200",
     icone: Crown,
     rotulo: "Campeão",
-    badge: "bg-violet-300 text-slate-950",
-    anel: "ring-violet-300/50",
+    badge: "bg-rose-300 text-slate-950",
+    anel: "ring-rose-300/50",
     altura: "sm:-translate-y-6",
   },
   2: {
@@ -110,7 +110,7 @@ function PodioCard({ u }: { u: RankingEntry }) {
         estilo.borda,
         estilo.fundo,
         primeiro
-          ? "shadow-[0_0_45px_rgba(139,92,246,0.14)] sm:p-6"
+          ? "shadow-[0_0_45px_rgba(236,72,126,0.14)] sm:p-6"
           : "shadow-lg",
         estilo.altura
       )}
@@ -156,7 +156,7 @@ function PodioCard({ u }: { u: RankingEntry }) {
 
         <div className="w-full rounded-xl border border-white/5 bg-black/40 px-3 py-2">
           <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Tempo total</p>
-          <p className={cn("font-mono font-bold", primeiro ? "text-2xl text-violet-200" : "text-lg")}>
+          <p className={cn("font-mono font-bold", primeiro ? "text-2xl text-rose-200" : "text-lg")}>
             {formatHMS(u.total_segundos)}
           </p>
         </div>
@@ -222,27 +222,27 @@ export default function RankingPage() {
       {!loading && top3.length > 0 && (
         <div className="space-y-3 pt-3 md:hidden">
           {top3[0] && (
-            <article className="relative overflow-hidden rounded-3xl border border-violet-300/45 bg-gradient-to-br from-violet-400/[0.17] via-indigo-500/[0.07] to-card p-5 shadow-[0_12px_45px_rgba(139,92,246,0.12)]">
-              <div className="pointer-events-none absolute -right-10 -top-14 h-40 w-40 rounded-full bg-violet-400/10 blur-3xl" />
+            <article className="relative overflow-hidden rounded-3xl border border-rose-300/45 bg-gradient-to-br from-rose-400/[0.17] via-rose-500/[0.07] to-card p-5 shadow-[0_12px_45px_rgba(236,72,126,0.12)]">
+              <div className="pointer-events-none absolute -right-10 -top-14 h-40 w-40 rounded-full bg-rose-400/10 blur-3xl" />
               <div className="relative flex items-center gap-4">
-                <div className="relative shrink-0 rounded-full p-1 ring-2 ring-violet-300/70 ring-offset-2 ring-offset-[#0b0e18]">
+                <div className="relative shrink-0 rounded-full p-1 ring-2 ring-rose-300/70 ring-offset-2 ring-offset-[#0b0e18]">
                   <Avatar url={top3[0].avatar_url} nome={nomeJogador(top3[0])} size="lg" />
-                  <span className="absolute -bottom-1 -right-1 flex h-8 w-8 items-center justify-center rounded-full border-2 border-[#0b0e18] bg-violet-300 text-slate-950 shadow-lg">
+                  <span className="absolute -bottom-1 -right-1 flex h-8 w-8 items-center justify-center rounded-full border-2 border-[#0b0e18] bg-rose-300 text-slate-950 shadow-lg">
                     <Crown size={16} />
                   </span>
                 </div>
                 <div className="min-w-0 flex-1">
-                  <span className="inline-flex items-center gap-1 rounded-full border border-violet-300/30 bg-violet-300/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-violet-100">
+                  <span className="inline-flex items-center gap-1 rounded-full border border-rose-300/30 bg-rose-300/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-rose-100">
                     <Trophy size={11} /> Líder da tropa
                   </span>
                   <h2 className="mt-2 truncate text-xl font-black tracking-tight text-white">{nomeJogador(top3[0])}</h2>
-                  <p className="text-xs text-violet-100/70">1º lugar · campeão</p>
+                  <p className="text-xs text-rose-100/70">1º lugar · campeão</p>
                 </div>
               </div>
               <div className="relative mt-5 flex items-end justify-between gap-3 rounded-2xl border border-white/5 bg-black/35 px-4 py-3">
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-widest text-violet-100/60">Tempo total de farm</p>
-                  <p className="mt-1 font-mono text-2xl font-black tracking-tight text-violet-200">{formatHMS(top3[0].total_segundos)}</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-rose-100/60">Tempo total de farm</p>
+                  <p className="mt-1 font-mono text-2xl font-black tracking-tight text-rose-200">{formatHMS(top3[0].total_segundos)}</p>
                 </div>
                 <div className="pb-1 text-right">
                   <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Vantagem</p>
@@ -378,7 +378,7 @@ export default function RankingPage() {
                       <td className="px-5 py-3.5">
                         <div className="h-2 w-full max-w-[220px] overflow-hidden rounded-full bg-white/5">
                           <div
-                            className="h-full rounded-full bg-gradient-to-r from-indigo-400 to-blue-500 transition-all duration-700 ease-out"
+                            className="h-full rounded-full bg-gradient-to-r from-rose-400 to-blue-500 transition-all duration-700 ease-out"
                             style={{ width: `${progresso}%` }}
                           />
                         </div>
@@ -415,7 +415,7 @@ export default function RankingPage() {
                   </div>
                   <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/5">
                     <div
-                      className="h-full rounded-full bg-gradient-to-r from-indigo-400 to-blue-500 transition-all duration-700 ease-out"
+                      className="h-full rounded-full bg-gradient-to-r from-rose-400 to-blue-500 transition-all duration-700 ease-out"
                       style={{ width: `${progresso}%` }}
                     />
                   </div>
@@ -436,7 +436,7 @@ export default function RankingPage() {
             </p>
           </div>
           <div className="flex items-center gap-3 rounded-xl border border-border/50 bg-card/40 px-4 py-3">
-            <Zap size={16} className="text-violet-200" />
+            <Zap size={16} className="text-rose-200" />
             <p className="text-xs text-muted-foreground">
               A proporção das barras é calculada sobre o tempo do <strong className="text-foreground">1º colocado</strong>.
             </p>

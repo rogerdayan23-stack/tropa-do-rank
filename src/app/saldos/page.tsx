@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useCallback, useEffect, useState, useMemo } from "react";
+import Image from "next/image";
 import {
   DollarSign,
   Loader2,
@@ -11,6 +12,9 @@ import {
   CalendarDays,
   RotateCcw,
   AlertTriangle,
+  BarChart3,
+  Calculator,
+  Download,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -18,6 +22,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { calcularTaxaHoraSemana, calcularTotalReceber } from "@/lib/finance.mjs";
 import {
   Dialog,
   DialogContent,
@@ -46,19 +51,27 @@ interface ResumoSemanal {
   data_fim: string;
   lucro_bruto_semana: number;
   total_horas_equipe_semana: number;
+  taxa_hora_semana: number;
   fechada: boolean;
+}
+
+interface DiaSaldo {
+  data: string;
+  lucro_total: number;
+  horas_total: number;
 }
 
 interface DiaSelecionado {
   data: string;
   lucro_dia: number;
   total_horas_dia: number;
-  taxa_hora_dia: number;
+  taxa_hora_semana: number;
 }
 
 interface SaldoData {
   resumo_semanal: ResumoSemanal;
   dia_selecionado: DiaSelecionado;
+  dias: DiaSaldo[];
   jogadores: JogadorSaldo[];
 }
 
@@ -67,7 +80,7 @@ function Avatar({ url, nome }: { url: string | null; nome: string }) {
   return (
     <div className="w-8 h-8 rounded-full overflow-hidden bg-primary/20 border border-primary/30 flex items-center justify-center flex-shrink-0">
       {src ? (
-        <img src={src} alt={nome} className="w-full h-full object-cover" />
+        <Image src={src} alt={nome} width={32} height={32} unoptimized className="h-full w-full object-cover" />
       ) : (
         <span className="text-xs font-bold text-primary">{nome?.[0]?.toUpperCase() || "?"}</span>
       )}
@@ -82,6 +95,10 @@ function formatHoras(h: number) {
   return `${horas}h ${mins.toString().padStart(2, "0")}m`;
 }
 
+function moeda(valor: number) {
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(valor) || 0);
+}
+
 function formatPagoEm(iso: string) {
   return new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 }
@@ -92,6 +109,10 @@ function formatDataBR(dataStr: string) {
   return `${dia}/${mes}/${ano}`;
 }
 
+function dataLocal(date = new Date()) {
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
+}
+
 export default function SaldosPage() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -99,8 +120,9 @@ export default function SaldosPage() {
   const [confirmando, setConfirmando] = useState<string | null>(null);
   const [fechandoSemana, setFechandoSemana] = useState(false);
   const [modalFecharOpen, setModalFecharOpen] = useState(false);
+  const [requestFechamento, setRequestFechamento] = useState<string | null>(null);
 
-  const hoje = new Date().toISOString().split("T")[0];
+  const hoje = dataLocal();
   const [dataSel, setDataSel] = useState(hoje);
   const [valorLucroInput, setValorLucroInput] = useState("");
   const [saldoData, setSaldoData] = useState<SaldoData | null>(null);
@@ -108,12 +130,6 @@ export default function SaldosPage() {
   useEffect(() => {
     verificarAdmin();
   }, []);
-
-  useEffect(() => {
-    void buscarSaldos();
-    const intervalo = setInterval(() => void buscarSaldos(false), 10000);
-    return () => clearInterval(intervalo);
-  }, [dataSel]);
 
   async function verificarAdmin() {
     try {
@@ -126,10 +142,10 @@ export default function SaldosPage() {
     }
   }
 
-  async function buscarSaldos(atualizarInputLucro = true) {
+  const buscarSaldos = useCallback(async (atualizarInputLucro = true) => {
     try {
       const res = await fetch(`/api/saldos?data=${dataSel}`, { cache: "no-store" });
-      const data: SaldoData = await res.json();
+      const data: SaldoData & { error?: string } = await res.json();
       if (res.ok) {
         setSaldoData(data);
         if (atualizarInputLucro) {
@@ -140,12 +156,18 @@ export default function SaldosPage() {
           }
         }
       } else {
-        toast.error("Erro ao carregar saldos");
+        toast.error(data.error || "Erro ao carregar saldos");
       }
     } catch {
       toast.error("Erro ao conectar com a API");
     }
-  }
+  }, [dataSel]);
+
+  useEffect(() => {
+    void buscarSaldos();
+    const intervalo = setInterval(() => void buscarSaldos(false), 10000);
+    return () => clearInterval(intervalo);
+  }, [buscarSaldos]);
 
   async function salvarLucro() {
     const valor = parseFloat(valorLucroInput);
@@ -176,6 +198,8 @@ export default function SaldosPage() {
 
   async function fecharSemana() {
     if (!saldoData) return;
+    const requestId = requestFechamento || crypto.randomUUID();
+    setRequestFechamento(requestId);
     setFechandoSemana(true);
     try {
       const res = await fetch("/api/saldos/fechar-semana", {
@@ -187,6 +211,7 @@ export default function SaldosPage() {
           lucro_total: dadosCalculadosEmTempoReal.lucroBrutoSemana,
           total_horas: saldoData.resumo_semanal.total_horas_equipe_semana,
           detalhes: dadosCalculadosEmTempoReal.jogadores,
+          request_id: requestId,
         }),
       });
       const data = await res.json();
@@ -194,8 +219,10 @@ export default function SaldosPage() {
         toast.error(data.error || "Erro ao fechar semana");
         return;
       }
-      toast.success("Semana resetada com sucesso!");
+      baixarComprovante();
+      toast.success("Semana fechada. O comprovante foi baixado.");
       setModalFecharOpen(false);
+      setRequestFechamento(null);
       setValorLucroInput("");
       await buscarSaldos();
     } catch {
@@ -203,6 +230,38 @@ export default function SaldosPage() {
     } finally {
       setFechandoSemana(false);
     }
+  }
+
+  function baixarComprovante() {
+    if (!saldoData) return;
+    const resumo = saldoData.resumo_semanal;
+    const colunas = ["Jogador", "Horas da semana", "Taxa por hora", "Valor bruto", "Penalidades", "Total a receber", "Pagamento", "Pago em"];
+    const linhas: (string | number)[][] = [
+      ["Comprovante semanal", `${formatDataBR(resumo.data_inicio)} a ${formatDataBR(resumo.data_fim)}`],
+      ["Lucro bruto da semana", dadosCalculadosEmTempoReal.lucroBrutoSemana.toFixed(2)],
+      ["Horas da equipe", resumo.total_horas_equipe_semana.toFixed(2)],
+      ["Taxa por hora", dadosCalculadosEmTempoReal.taxaHoraSemana.toFixed(2)],
+      [],
+      colunas,
+      ...dadosCalculadosEmTempoReal.jogadores.map((j) => [
+        j.username,
+        j.horas_semana.toFixed(2),
+        dadosCalculadosEmTempoReal.taxaHoraSemana.toFixed(2),
+        j.bruto_semana.toFixed(2),
+        j.penalidades_semana.toFixed(2),
+        j.total_receber_semana.toFixed(2),
+        j.pago ? "Pago" : "Pendente",
+        j.pago_em ? new Date(j.pago_em).toLocaleString("pt-BR") : "",
+      ]),
+    ];
+    const csv = linhas.map((linha) => linha.map((celula) => `"${String(celula ?? "").replace(/"/g, '""')}"`).join(";")).join("\r\n");
+    const blob = new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `comprovante-semanal-${resumo.data_inicio}-${resumo.data_fim}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
   }
 
   async function confirmarPagamento(jogador: JogadorSaldo) {
@@ -237,31 +296,28 @@ export default function SaldosPage() {
   const dadosCalculadosEmTempoReal = useMemo(() => {
     if (!saldoData) {
       return {
-        taxaHoraDia: 0,
+        taxaHoraSemana: 0,
         lucroBrutoSemana: 0,
         jogadores: [],
       };
     }
 
     const valorDiaDigitado = parseFloat(valorLucroInput) || 0;
-    const totalHorasDia = saldoData.dia_selecionado.total_horas_dia || 0;
-    const taxaHoraDia = totalHorasDia > 0 ? valorDiaDigitado / totalHorasDia : 0;
 
     // Diferença em relação ao lucro salvo no banco para ajustar o total semanal
     const lucroSalvoDia = saldoData.dia_selecionado.lucro_dia || 0;
     const diffDia = valorDiaDigitado - lucroSalvoDia;
     const lucroBrutoSemana = Math.max(0, saldoData.resumo_semanal.lucro_bruto_semana + diffDia);
+    const totalHorasSemana = saldoData.resumo_semanal.total_horas_equipe_semana || 0;
+    const taxaHoraSemana = calcularTaxaHoraSemana(lucroBrutoSemana, totalHorasSemana);
 
     const jogadoresAtualizados = saldoData.jogadores.map((j) => {
-      // Valor ganho no dia com o novo input
-      const novoValorDia = j.horas_dia * taxaHoraDia;
-
-      // Ganho dos outros dias da semana (excluindo o valor antigo do dia)
-      const ganhoOutrosDias = Math.max(0, j.bruto_semana - j.valor_dia);
-      const novoBrutoSemana = ganhoOutrosDias + novoValorDia;
+      // Cada hora da semana recebe a mesma parte do lucro semanal atualizado.
+      const novoValorDia = j.horas_dia * taxaHoraSemana;
+      const novoBrutoSemana = j.horas_semana * taxaHoraSemana;
 
       // Total a receber na semana = Bruto da semana - Penalidades ativas da semana (mínimo 0)
-      const novoTotalReceber = Math.max(0, novoBrutoSemana - j.penalidades_semana);
+      const novoTotalReceber = calcularTotalReceber(novoBrutoSemana, j.penalidades_semana);
 
       return {
         ...j,
@@ -272,7 +328,7 @@ export default function SaldosPage() {
     });
 
     return {
-      taxaHoraDia: Number(taxaHoraDia.toFixed(2)),
+      taxaHoraSemana: Number(taxaHoraSemana.toFixed(2)),
       lucroBrutoSemana: Number(lucroBrutoSemana.toFixed(2)),
       jogadores: jogadoresAtualizados,
     };
@@ -287,6 +343,8 @@ export default function SaldosPage() {
   }
 
   const resumo = saldoData?.resumo_semanal;
+  const maiorLucroDia = Math.max(0, ...(saldoData?.dias || []).map((dia) => dia.lucro_total));
+  const maioresHorasDia = Math.max(0, ...(saldoData?.dias || []).map((dia) => dia.horas_total));
 
   return (
     <div className="space-y-6">
@@ -303,7 +361,7 @@ export default function SaldosPage() {
 
       {/* 1. SEÇÃO DE DESTAQUE: RESUMO SEMANAL */}
       {resumo && (
-        <Card className="border-2 border-primary/35 bg-primary/[0.025] shadow-[0_0_25px_rgba(99,102,241,0.08)]">
+        <Card className="border-2 border-primary/35 bg-primary/[0.025] shadow-[0_0_25px_rgba(236,72,126,0.09)]">
           <CardHeader className="pb-3">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div>
@@ -373,6 +431,61 @@ export default function SaldosPage() {
         </Card>
       )}
 
+      {saldoData && (
+        <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2 text-base"><BarChart3 size={17} className="text-primary" /> Semana em números</CardTitle>
+              <CardDescription>Lucro lançado e horas contabilizadas por dia.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="mb-3 flex flex-wrap gap-4 text-xs text-muted-foreground">
+                <span className="inline-flex items-center gap-2"><i className="h-2.5 w-2.5 rounded-sm bg-rose-400" />Lucro</span>
+                <span className="inline-flex items-center gap-2"><i className="h-2.5 w-2.5 rounded-sm bg-amber-300" />Horas</span>
+              </div>
+              <div className="grid grid-cols-7 gap-2" role="img" aria-label="Gráfico diário de lucro e horas da semana">
+                {(saldoData.dias || []).map((dia) => {
+                  const diaSemana = new Date(`${dia.data}T12:00:00`).toLocaleDateString("pt-BR", { weekday: "short" }).replace(".", "");
+                  const lucroAltura = maiorLucroDia ? Math.max(4, (dia.lucro_total / maiorLucroDia) * 100) : 4;
+                  const horasAltura = maioresHorasDia ? Math.max(4, (dia.horas_total / maioresHorasDia) * 100) : 4;
+                  return (
+                    <div key={dia.data} className="min-w-0 text-center" title={`${formatDataBR(dia.data)} · ${moeda(dia.lucro_total)} · ${formatHoras(dia.horas_total)}`}>
+                      <div className="flex h-28 items-end justify-center gap-1 rounded-lg bg-muted/20 px-1 pb-2 pt-2">
+                        <div className="w-2.5 rounded-t bg-rose-400" style={{ height: `${lucroAltura}%` }} />
+                        <div className="w-2.5 rounded-t bg-amber-300" style={{ height: `${horasAltura}%` }} />
+                      </div>
+                      <p className="mt-2 truncate text-[10px] capitalize text-muted-foreground">{diaSemana}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2 text-base"><Calculator size={17} className="text-primary" /> Como chegamos ao valor</CardTitle>
+              <CardDescription>A divisão usa os dados da semana selecionada.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm">
+              <div className="rounded-lg border border-border/60 bg-muted/20 p-3">
+                <p className="text-xs text-muted-foreground">1. Taxa por hora</p>
+                <p className="mt-1 font-semibold">Lucro semanal ÷ horas da equipe</p>
+                <p className="mt-1 font-mono text-primary">{moeda(dadosCalculadosEmTempoReal.lucroBrutoSemana)} ÷ {formatHoras(resumo?.total_horas_equipe_semana || 0)} = {moeda(dadosCalculadosEmTempoReal.taxaHoraSemana)}/h</p>
+              </div>
+              <div className="rounded-lg border border-border/60 bg-muted/20 p-3">
+                <p className="text-xs text-muted-foreground">2. Valor bruto do jogador</p>
+                <p className="mt-1 font-semibold">Horas semanais × taxa por hora</p>
+              </div>
+              <div className="rounded-lg border border-border/60 bg-muted/20 p-3">
+                <p className="text-xs text-muted-foreground">3. Total a receber</p>
+                <p className="mt-1 font-semibold">Valor bruto − penalidades da semana</p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       {/* 2. CONTROLE DIÁRIO (LANÇAMENTO DO DIA) - APENAS ADMIN */}
       {isAdmin && (
       <Card>
@@ -420,16 +533,17 @@ export default function SaldosPage() {
 
             {isAdmin && (
               <Button
+                variant="success"
                 onClick={salvarLucro}
                 disabled={salvandoLucro || !valorLucroInput}
-                className="w-full sm:w-auto bg-primary text-black font-semibold hover:bg-primary/90"
+                className="w-full sm:w-auto font-semibold"
               >
                 {salvandoLucro ? <Loader2 size={14} className="animate-spin mr-2" /> : null}
                 Salvar / Calcular Lucro do Dia
               </Button>
             )}
 
-            {/* Taxa/Hora do Dia em destaque */}
+            {/* Taxa/Hora da Semana em destaque */}
             <div className="w-full sm:ml-auto sm:w-auto flex items-center justify-between sm:justify-start gap-3 bg-muted/30 px-4 py-3 sm:py-2 rounded-lg border border-border/40">
               <div className="text-right">
                 <p className="text-xs text-muted-foreground">Horas do Dia (Time):</p>
@@ -439,9 +553,9 @@ export default function SaldosPage() {
               </div>
               <div className="h-7 w-px bg-border/60" />
               <div className="text-right">
-                <p className="text-xs text-muted-foreground">Taxa/Hora do Dia:</p>
+                <p className="text-xs text-muted-foreground">Taxa/Hora da Semana:</p>
                 <p className="font-bold text-sm text-primary font-mono">
-                  R$ {dadosCalculadosEmTempoReal.taxaHoraDia.toFixed(2).replace(".", ",")}
+                  R$ {dadosCalculadosEmTempoReal.taxaHoraSemana.toFixed(2).replace(".", ",")}
                 </p>
               </div>
             </div>
@@ -560,10 +674,11 @@ export default function SaldosPage() {
                       ) : j.valor_dia > 0 ? (
                         isAdmin ? (
                           <Button
+                            variant="success"
                             size="sm"
                             onClick={() => confirmarPagamento(j)}
                             disabled={confirmando === j.id}
-                            className="h-7 text-xs bg-primary text-black hover:bg-primary/90 font-semibold"
+                            className="h-7 text-xs font-semibold"
                           >
                             {confirmando === j.id ? (
                               <Loader2 size={12} className="animate-spin mr-1" />
@@ -573,7 +688,7 @@ export default function SaldosPage() {
                         ) : (
                           <Badge
                             variant="outline"
-                            className="text-[10px] border-violet-400/30 text-violet-200"
+                            className="text-[10px] border-rose-400/30 text-rose-200"
                           >
                             <Clock size={10} className="mr-1" />
                             A pagar
@@ -602,7 +717,7 @@ export default function SaldosPage() {
                   {j.pago ? (
                     <Badge className="shrink-0 bg-primary/15 text-primary border-primary/30"><CheckCircle2 size={12} className="mr-1" />Pago</Badge>
                   ) : j.valor_dia > 0 ? (
-                    <Badge variant="outline" className="shrink-0 border-violet-400/30 text-violet-200"><Clock size={12} className="mr-1" />A pagar</Badge>
+                    <Badge variant="outline" className="shrink-0 border-rose-400/30 text-rose-200"><Clock size={12} className="mr-1" />A pagar</Badge>
                   ) : <Badge variant="outline" className="shrink-0">Pendente</Badge>}
                 </div>
                 <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
@@ -617,7 +732,7 @@ export default function SaldosPage() {
                 </div>
                 {j.pago_em && j.pago && <p className="mt-2 text-right text-[11px] text-muted-foreground">Pago às {formatPagoEm(j.pago_em)}</p>}
                 {!j.pago && j.valor_dia > 0 && isAdmin && (
-                  <Button onClick={() => confirmarPagamento(j)} disabled={confirmando === j.id} className="mt-3 h-11 w-full bg-primary font-semibold text-black hover:bg-primary/90">
+                  <Button variant="success" onClick={() => confirmarPagamento(j)} disabled={confirmando === j.id} className="mt-3 h-11 w-full font-semibold">
                     {confirmando === j.id ? <Loader2 size={14} className="mr-2 animate-spin" /> : <CheckCircle2 size={14} className="mr-2" />}
                     Confirmar pagamento
                   </Button>
@@ -629,8 +744,12 @@ export default function SaldosPage() {
       </Card>
 
       {/* MODAL DE CONFIRMAÇÃO: FECHAR SEMANA / RESETAR */}
-      <Dialog open={modalFecharOpen} onOpenChange={setModalFecharOpen}>
-        <DialogContent className="bg-[#111] border-border/60 max-w-md">
+      <Dialog open={modalFecharOpen} onOpenChange={(aberto) => {
+        setModalFecharOpen(aberto);
+        if (aberto) setRequestFechamento(crypto.randomUUID());
+        else if (!fechandoSemana) setRequestFechamento(null);
+      }}>
+        <DialogContent className="max-h-[88vh] max-w-xl overflow-y-auto border-border/60 bg-[#111]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-red-400">
               <AlertTriangle size={20} />
@@ -660,10 +779,23 @@ export default function SaldosPage() {
             </div>
           </div>
 
+          <div className="max-h-48 space-y-2 overflow-y-auto rounded-lg border border-border/50 p-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Conferência por jogador</p>
+            {dadosCalculadosEmTempoReal.jogadores.map((j) => (
+              <div key={j.id} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-border/40 pb-2 text-xs last:border-0 last:pb-0">
+                <span className="font-semibold">{j.username}<span className="ml-2 font-normal text-muted-foreground">{formatHoras(j.horas_semana)} · bruto {moeda(j.bruto_semana)} − {moeda(j.penalidades_semana)}</span></span>
+                <span className="font-mono font-bold text-primary">{moeda(j.total_receber_semana)}</span>
+              </div>
+            ))}
+          </div>
+
           <DialogFooter className="gap-2 pt-2">
+            <Button variant="outline" onClick={baixarComprovante} disabled={!saldoData} className="mr-auto gap-2">
+              <Download size={15} /> Baixar prévia CSV
+            </Button>
             <Button
               variant="outline"
-              onClick={() => setModalFecharOpen(false)}
+              onClick={() => { setModalFecharOpen(false); setRequestFechamento(null); }}
               disabled={fechandoSemana}
             >
               Cancelar
@@ -682,4 +814,3 @@ export default function SaldosPage() {
     </div>
   );
 }
-

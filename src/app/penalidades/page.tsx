@@ -199,7 +199,7 @@ export default function PenalidadesPage() {
         <div className="flex items-center justify-between">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <AlertTriangle size={22} className="text-violet-200" />
+            <AlertTriangle size={22} className="text-rose-200" />
             <h1 className="text-2xl font-bold tracking-tight">Penalidades</h1>
           </div>
           <p className="text-muted-foreground text-sm">
@@ -336,7 +336,7 @@ export default function PenalidadesPage() {
         <DialogContent className="bg-[#111] border-border/60 max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <AlertTriangle size={18} className="text-violet-200" />
+              <AlertTriangle size={18} className="text-rose-200" />
               Nova Penalidade
             </DialogTitle>
           </DialogHeader>

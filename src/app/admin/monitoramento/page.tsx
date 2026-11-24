@@ -161,7 +161,7 @@ export default function AdminMasterMonitor() {
   }
 
   function classeStatus(status: string) {
-    if (status === "ativa") return "border-violet-300/30 bg-violet-300/10 text-violet-100";
+    if (status === "ativa") return "border-rose-300/30 bg-rose-300/10 text-rose-100";
     if (status === "pausada") return "border-cyan-300/30 bg-cyan-300/10 text-cyan-100";
     return "border-border bg-secondary/70 text-muted-foreground";
   }
@@ -174,8 +174,8 @@ export default function AdminMasterMonitor() {
     <div className="space-y-6">
       <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="flex min-w-0 items-center gap-3 pl-12 sm:pl-0">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-violet-300/30 bg-violet-300/10">
-            <Crown size={23} className="text-violet-100" />
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-rose-300/30 bg-rose-300/10">
+            <Crown size={23} className="text-rose-100" />
           </div>
           <div className="min-w-0">
             <h1 className="text-2xl font-black tracking-tight sm:text-3xl">Monitoramento ao vivo</h1>
@@ -184,7 +184,7 @@ export default function AdminMasterMonitor() {
         </div>
         <div className="flex flex-wrap items-center gap-2 pl-12 sm:pl-0">
           <Badge variant="outline" className="gap-1.5 px-3 py-1"><Users size={13} /> {users.length} jogadores</Badge>
-          <Badge variant="outline" className="gap-1.5 border-violet-300/30 px-3 py-1 text-violet-100"><Activity size={13} /> {ativas} ativos</Badge>
+          <Badge variant="outline" className="gap-1.5 border-rose-300/30 px-3 py-1 text-rose-100"><Activity size={13} /> {ativas} ativos</Badge>
           <Button variant="outline" size="sm" onClick={() => void carregarDados()} disabled={loading} className="gap-2">
             <RefreshCw size={14} className={loading ? "animate-spin" : ""} /> Atualizar
           </Button>
@@ -199,7 +199,7 @@ export default function AdminMasterMonitor() {
       )}
 
       <div className="grid grid-cols-3 gap-3">
-        <Card><CardContent className="p-4 sm:p-5"><p className="text-xs text-muted-foreground">Ativos</p><p className="mt-1 text-2xl font-bold text-violet-100">{ativas}</p></CardContent></Card>
+        <Card><CardContent className="p-4 sm:p-5"><p className="text-xs text-muted-foreground">Ativos</p><p className="mt-1 text-2xl font-bold text-rose-100">{ativas}</p></CardContent></Card>
         <Card><CardContent className="p-4 sm:p-5"><p className="text-xs text-muted-foreground">Pausados</p><p className="mt-1 text-2xl font-bold text-cyan-100">{pausadas}</p></CardContent></Card>
         <Card><CardContent className="p-4 sm:p-5"><p className="text-xs text-muted-foreground">Inativos</p><p className="mt-1 text-2xl font-bold text-muted-foreground">{inativas}</p></CardContent></Card>
       </div>
@@ -235,7 +235,7 @@ export default function AdminMasterMonitor() {
                   <article key={usuario.id} className="min-w-0 rounded-xl border border-border/80 bg-card/70 p-4 shadow-sm">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex min-w-0 items-center gap-3">
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-violet-300/20 bg-violet-300/10 text-sm font-bold text-violet-100">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-rose-300/20 bg-rose-300/10 text-sm font-bold text-rose-100">
                           {usuario.avatar_url ? <img src={usuario.avatar_url} alt="" className="h-full w-full object-cover" /> : nome.slice(0, 1).toUpperCase()}
                         </div>
                         <div className="min-w-0">
@@ -255,7 +255,7 @@ export default function AdminMasterMonitor() {
                     {sessao && (
                       <div className="mt-3 flex gap-2">
                         {status === "ativa" ? (
-                          <Button size="sm" variant="outline" onClick={() => void executarAcao("pausar", sessao.id)} className="flex-1 gap-1.5 border-violet-300/30 text-violet-100"><Pause size={13} /> Pausar</Button>
+                          <Button size="sm" variant="outline" onClick={() => void executarAcao("pausar", sessao.id)} className="flex-1 gap-1.5 border-rose-300/30 text-rose-100"><Pause size={13} /> Pausar</Button>
                         ) : (
                           <Button size="sm" variant="outline" onClick={() => void executarAcao("retomar", sessao.id)} className="flex-1 gap-1.5 border-cyan-300/30 text-cyan-100"><Play size={13} /> Retomar</Button>
                         )}

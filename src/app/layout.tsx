@@ -1,10 +1,21 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { Inter } from "next/font/google";
+import localFont from "next/font/local";
 import { Providers } from "@/components/providers";
 import { Sidebar } from "@/components/sidebar";
 
-const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
+const geist = localFont({
+  src: "./fonts/GeistVF.woff",
+  variable: "--font-geist",
+  display: "swap",
+  weight: "100 900",
+});
+const geistMono = localFont({
+  src: "./fonts/GeistMonoVF.woff",
+  variable: "--font-geist-mono",
+  display: "swap",
+  weight: "100 900",
+});
 
 export const metadata: Metadata = {
   title: "Rank dos Cuiudos",
@@ -19,10 +30,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="pt-BR" suppressHydrationWarning className="scroll-smooth dark">
-      <body className={`${inter.variable} antialiased min-h-screen bg-background text-foreground`}>
+      <body className={`${geist.variable} ${geistMono.variable} antialiased min-h-screen bg-background text-foreground`}>
         <Providers>
           <Sidebar />
-          <main className="lg:ml-60 min-h-screen pb-12 px-4 sm:px-6 lg:px-8 pt-6">
+          <main className="lg:ml-60 min-h-screen pb-12 px-4 sm:px-6 lg:px-8 pt-20 lg:pt-6">
             <div className="max-w-6xl mx-auto">{children}</div>
           </main>
         </Providers>

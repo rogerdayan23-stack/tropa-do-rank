@@ -4,31 +4,31 @@
 
 @layer base {
   :root {
-    --background: 225 29% 6%;
-    --foreground: 225 24% 96%;
-    --card: 225 24% 9%;
-    --card-foreground: 225 24% 96%;
-    --popover: 225 24% 9%;
-    --popover-foreground: 225 24% 96%;
-    --primary: 250 92% 72%;
-    --primary-foreground: 232 38% 11%;
-    --secondary: 225 19% 15%;
-    --secondary-foreground: 225 24% 96%;
-    --muted: 225 17% 14%;
-    --muted-foreground: 222 12% 68%;
-    --accent: 225 18% 17%;
-    --accent-foreground: 225 24% 96%;
-    --destructive: 0 84% 60%;
+    --background: 330 10% 6%;
+    --foreground: 345 14% 96%;
+    --card: 330 9% 9%;
+    --card-foreground: 345 14% 96%;
+    --popover: 330 10% 10%;
+    --popover-foreground: 345 14% 96%;
+    --primary: 336 82% 68%;
+    --primary-foreground: 340 24% 10%;
+    --secondary: 330 8% 15%;
+    --secondary-foreground: 345 14% 96%;
+    --muted: 330 8% 14%;
+    --muted-foreground: 330 8% 68%;
+    --accent: 330 9% 17%;
+    --accent-foreground: 345 14% 96%;
+    --destructive: 0 78% 58%;
     --destructive-foreground: 0 0% 100%;
-    --border: 225 17% 20%;
-    --input: 225 17% 20%;
-    --ring: 250 92% 72%;
-    --radius: 1rem;
+    --border: 330 8% 21%;
+    --input: 330 8% 23%;
+    --ring: 336 82% 68%;
+    --radius: 1.125rem;
   }
 
   .dark {
-    --background: 0 0% 7%;
-    --foreground: 0 0% 95%;
+    --background: 330 10% 6%;
+    --foreground: 345 14% 96%;
   }
 }
 
@@ -39,14 +39,40 @@
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 0 1;
-    font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
-    background-image: radial-gradient(ellipse at 50% -28%, hsl(var(--primary) / 0.075), transparent 56%);
+    font-family: var(--font-geist), ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+    background-image:
+      radial-gradient(ellipse at 48% -28%, hsl(var(--primary) / 0.11), transparent 55%),
+      radial-gradient(ellipse at 100% 0%, hsl(34 42% 60% / 0.045), transparent 36%);
     background-repeat: no-repeat;
-    background-size: 100% 560px;
+    background-size: 100% 560px, 100% 760px;
   }
 
   ::selection {
     color: hsl(var(--primary-foreground));
     background: hsl(var(--primary) / 0.8);
+  }
+
+  html {
+    scrollbar-color: hsl(var(--border)) hsl(var(--background));
+    scrollbar-width: thin;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: hsl(var(--background));
+  }
+
+  ::-webkit-scrollbar-thumb {
+    border: 3px solid hsl(var(--background));
+    border-radius: 999px;
+    background: hsl(var(--border));
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--primary) / 0.65);
   }
 }

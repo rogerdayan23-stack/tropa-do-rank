@@ -71,7 +71,7 @@ export function Navbar() {
     <nav className="fixed top-0 left-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur-md">
       <div className="max-w-7xl mx-auto flex items-center justify-between px-4 sm:px-6 h-16">
         <Link href="/dashboard" className="flex items-center gap-2.5 transition-opacity hover:opacity-90">
-          <div className="h-9 w-9 rounded-xl border border-violet-300/35 bg-gradient-to-br from-violet-500/25 to-cyan-400/10 flex items-center justify-center text-violet-200 shadow-md shadow-violet-500/15">
+          <div className="h-9 w-9 rounded-xl border border-rose-300/35 bg-gradient-to-br from-rose-500/25 to-amber-200/10 flex items-center justify-center text-rose-200 shadow-md shadow-rose-500/15">
             <Crown size={19} />
           </div>
           <span className="whitespace-nowrap text-sm sm:text-base font-black tracking-tight text-foreground">

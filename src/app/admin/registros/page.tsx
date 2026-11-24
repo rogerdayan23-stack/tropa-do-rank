@@ -67,7 +67,7 @@ function dataHora(valor: string) {
 }
 
 function corCategoria(categoria: Exclude<Categoria, "todas">) {
-  if (categoria === "usuarios") return "border-violet-300/25 bg-violet-300/10 text-violet-100";
+  if (categoria === "usuarios") return "border-rose-300/25 bg-rose-300/10 text-rose-100";
   if (categoria === "sessoes") return "border-cyan-300/25 bg-cyan-300/10 text-cyan-100";
   if (categoria === "financeiro") return "border-amber-300/25 bg-amber-300/10 text-amber-100";
   return "border-border bg-secondary text-muted-foreground";
@@ -125,11 +125,11 @@ export default function RegistrosAdminPage() {
     <div className="mx-auto w-full max-w-6xl space-y-6 pb-8">
       <header className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div className="flex items-start gap-3">
-          <div className="mt-1 flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-violet-300/25 bg-violet-300/10 text-violet-200">
+          <div className="mt-1 flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-rose-300/25 bg-rose-300/10 text-rose-200">
             <FileClock size={22} />
           </div>
           <div>
-            <p className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-violet-200/80">Administração</p>
+            <p className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-rose-200/80">Administração</p>
             <h1 className="text-2xl font-black tracking-tight sm:text-3xl">Registros de auditoria</h1>
             <p className="mt-1 max-w-2xl text-sm text-muted-foreground">Histórico das alterações e operações administrativas feitas no site.</p>
           </div>
@@ -141,7 +141,7 @@ export default function RegistrosAdminPage() {
 
       <section className="grid gap-3 sm:grid-cols-3">
         <Card><CardContent className="flex items-center gap-3 p-4">
-          <div className="rounded-xl bg-violet-300/10 p-2.5 text-violet-200"><Activity size={18} /></div>
+          <div className="rounded-xl bg-rose-300/10 p-2.5 text-rose-200"><Activity size={18} /></div>
           <div><p className="text-xs text-muted-foreground">Ações registradas</p><p className="text-xl font-bold tabular-nums">{total}</p></div>
         </CardContent></Card>
         <Card><CardContent className="flex items-center gap-3 p-4">
@@ -157,7 +157,7 @@ export default function RegistrosAdminPage() {
       <Card>
         <CardHeader className="gap-4 border-b border-border/70 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <CardTitle className="flex items-center gap-2"><ShieldCheck size={18} className="text-violet-200" /> Histórico administrativo</CardTitle>
+            <CardTitle className="flex items-center gap-2"><ShieldCheck size={18} className="text-rose-200" /> Histórico administrativo</CardTitle>
             <p className="mt-1 text-sm text-muted-foreground">Cada evento mostra quem fez a ação, o alvo e os detalhes disponíveis.</p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row">
@@ -207,7 +207,7 @@ export default function RegistrosAdminPage() {
                           <span className="text-xs text-muted-foreground">{registro.acao}</span>
                         </div>
                         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
-                          <span className="inline-flex items-center gap-1.5"><UserRound size={14} className="text-violet-200" /><span className="text-muted-foreground">Responsável:</span> <strong>{registro.ator_nome || "Admin removido"}</strong></span>
+                          <span className="inline-flex items-center gap-1.5"><UserRound size={14} className="text-rose-200" /><span className="text-muted-foreground">Responsável:</span> <strong>{registro.ator_nome || "Admin removido"}</strong></span>
                           {registro.alvo_nome && <span className="inline-flex items-center gap-1.5"><span className="text-muted-foreground">Alvo:</span> <strong>{registro.alvo_nome}</strong></span>}
                         </div>
                         {registro.detalhe && <p className="break-words text-sm leading-relaxed text-muted-foreground">{registro.detalhe}</p>}
