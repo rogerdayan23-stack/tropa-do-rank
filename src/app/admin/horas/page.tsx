@@ -49,8 +49,6 @@ export default function RegistroHorasPage() {
 
   useEffect(() => {
     setAgora(Date.now());
-    const intervalo = setInterval(() => setAgora(Date.now()), 1000);
-    return () => clearInterval(intervalo);
   }, []);
 
   const grupos = useMemo(() => {
@@ -98,6 +96,14 @@ export default function RegistroHorasPage() {
       };
     }).sort((a, b) => new Date(b.ultima?.criado_em || 0).getTime() - new Date(a.ultima?.criado_em || 0).getTime());
   }, [eventos, agora]);
+
+  const temSessaoAtiva = grupos.some((grupo) => grupo.emAndamento);
+
+  useEffect(() => {
+    if (!temSessaoAtiva) return;
+    const intervalo = setInterval(() => setAgora(Date.now()), 1000);
+    return () => clearInterval(intervalo);
+  }, [temSessaoAtiva]);
 
   const carregar = useCallback(async (paginaAlvo = 1, anexar = false) => {
     if (anexar) setLoadingMais(true);
