@@ -15,6 +15,7 @@ interface UsuarioMonitorado {
   role: string;
   avatar_url: string | null;
   total_segundos: number;
+  horas_semana_segundos?: number | null;
 }
 
 interface SessaoMonitorada {
@@ -48,8 +49,31 @@ export default function AdminMasterMonitor() {
   const [filtro, setFiltro] = useState<FiltroStatus>("todos");
   const [, atualizarRelogio] = useState(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const horasIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const carregandoRef = useRef(false);
+  const horasSemanaRef = useRef<Map<string, number>>(new Map());
+
+  const carregarHorasSemana = useCallback(async () => {
+    const agora = new Date();
+    const hojeLocal = new Date(agora.getTime() - agora.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
+    try {
+      const resposta = await fetch(`/api/saldos?apenas_horas=true&data=${hojeLocal}`, { cache: "no-store" });
+      if (!resposta.ok) return;
+      const dados = await resposta.json();
+      const horas = new Map<string, number>((dados.jogadores || []).map((jogador: { id: string; horas_semana_segundos: number }) => [
+        jogador.id,
+        Math.max(0, Number(jogador.horas_semana_segundos) || 0),
+      ]));
+      horasSemanaRef.current = horas;
+      setUsers((atuais) => atuais.map((usuario) => ({
+        ...usuario,
+        horas_semana_segundos: horas.get(usuario.id) ?? 0,
+      })));
+    } catch {
+      // Mantém a última apuração válida enquanto os dados ao vivo continuam atualizando.
+    }
+  }, []);
 
   const carregarDados = useCallback(async () => {
     if (carregandoRef.current) return;
@@ -63,7 +87,10 @@ export default function AdminMasterMonitor() {
       if (!resUsers.ok) throw new Error(dadosUsers.error || "Não foi possível carregar os jogadores.");
       if (!resSessoes.ok) throw new Error(dadosSessoes.error || "Não foi possível carregar as sessões ao vivo.");
 
-      setUsers(dadosUsers.users || []);
+      setUsers((dadosUsers.users || []).map((usuario: UsuarioMonitorado) => ({
+        ...usuario,
+        horas_semana_segundos: horasSemanaRef.current.get(usuario.id) ?? null,
+      })));
       setSessoes((dadosSessoes.sessoes || []).map((sessao: Omit<SessaoMonitorada, "sincronizadaEm">) => ({
         ...sessao,
         duracao: Math.max(0, Number(sessao.duracao ?? sessao.segundos_acumulados) || 0),
@@ -94,9 +121,10 @@ export default function AdminMasterMonitor() {
         }
         if (cancelado) return;
 
-        await carregarDados();
+        await Promise.all([carregarDados(), carregarHorasSemana()]);
         if (cancelado) return;
         intervalRef.current = setInterval(() => void carregarDados(), 3000);
+        horasIntervalRef.current = setInterval(() => void carregarHorasSemana(), 30000);
         tickRef.current = setInterval(() => atualizarRelogio((valor) => valor + 1), 1000);
       } catch {
         router.replace("/dashboard");
@@ -107,9 +135,10 @@ export default function AdminMasterMonitor() {
     return () => {
       cancelado = true;
       if (intervalRef.current) clearInterval(intervalRef.current);
+      if (horasIntervalRef.current) clearInterval(horasIntervalRef.current);
       if (tickRef.current) clearInterval(tickRef.current);
     };
-  }, [carregarDados, router]);
+  }, [carregarDados, carregarHorasSemana, router]);
 
   const sessaoPorUsuario = useMemo(() => {
     const mapa = new Map<string, SessaoMonitorada>();
@@ -210,7 +239,7 @@ export default function AdminMasterMonitor() {
             <CardTitle className="flex items-center gap-2"><Users size={18} className="text-primary" /> Jogadores</CardTitle>
             <p className="mt-1 text-sm text-muted-foreground">Cada pessoa aparece aqui, mesmo quando não iniciou uma sessão.</p>
           </div>
-          <p className="text-xs text-muted-foreground">{atualizadoEm ? `Sincronizado às ${atualizadoEm}` : "Sincronizando…"} · a cada 3 s</p>
+          <p className="text-xs text-muted-foreground">Sessões: {atualizadoEm ? `sincronizadas às ${atualizadoEm}` : "sincronizando…"} · horas da semana atualizadas a cada 30 s</p>
         </CardHeader>
         <CardContent className="space-y-4 p-4 sm:p-5">
           <div className="flex flex-wrap gap-2">
@@ -230,7 +259,6 @@ export default function AdminMasterMonitor() {
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {jogadoresFiltrados.map(({ usuario, sessao, status }) => {
                 const nome = usuario.apelido || usuario.username;
-                const tempo = sessao ? duracaoAtual(sessao) : Math.max(0, Number(usuario.total_segundos) || 0);
                 return (
                   <article key={usuario.id} className="min-w-0 rounded-xl border border-border/80 bg-card/70 p-4 shadow-sm">
                     <div className="flex items-start justify-between gap-3">
@@ -248,9 +276,17 @@ export default function AdminMasterMonitor() {
                         {textoStatus(status)}
                       </Badge>
                     </div>
-                    <div className="mt-4 flex items-center justify-between gap-2 border-t border-border/70 pt-3">
-                      <span className="text-xs text-muted-foreground">{sessao ? (status === "ativa" ? "Sessão atual" : "Tempo da sessão") : "Total acumulado"}</span>
-                      <span className="font-mono text-base font-bold tabular-nums">{formatHMS(tempo)}</span>
+                    <div className="mt-4 space-y-2 border-t border-border/70 pt-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs text-muted-foreground">Acumulado na semana (seg–sex)</span>
+                        <span className="font-mono text-base font-bold tabular-nums">{usuario.horas_semana_segundos == null ? "—" : formatHMS(usuario.horas_semana_segundos)}</span>
+                      </div>
+                      {sessao && (
+                        <div className="flex items-center justify-between gap-2 text-xs">
+                          <span className="text-muted-foreground">{status === "ativa" ? "Sessão atual" : "Tempo da sessão"}</span>
+                          <span className="font-mono font-semibold tabular-nums">{formatHMS(duracaoAtual(sessao))}</span>
+                        </div>
+                      )}
                     </div>
                     {sessao && (
                       <div className="mt-3 flex gap-2">

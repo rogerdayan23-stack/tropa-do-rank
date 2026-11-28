@@ -37,7 +37,9 @@ interface JogadorSaldo {
   username: string;
   avatar_url: string | null;
   horas_dia: number;
+  horas_dia_segundos: number;
   horas_semana: number;
+  horas_semana_segundos: number;
   valor_dia: number;
   bruto_semana: number;
   penalidades_semana: number;
@@ -51,6 +53,7 @@ interface ResumoSemanal {
   data_fim: string;
   lucro_bruto_semana: number;
   total_horas_equipe_semana: number;
+  total_horas_equipe_semana_segundos: number;
   taxa_hora_semana: number;
   fechada: boolean;
 }
@@ -93,6 +96,14 @@ function formatHoras(h: number) {
   const horas = Math.floor(h);
   const mins = Math.round((h - horas) * 60);
   return `${horas}h ${mins.toString().padStart(2, "0")}m`;
+}
+
+function formatHMS(segundos: number) {
+  const total = Math.max(0, Math.floor(Number(segundos) || 0));
+  const horas = Math.floor(total / 3600);
+  const minutos = Math.floor((total % 3600) / 60);
+  const segundosRestantes = total % 60;
+  return [horas, minutos, segundosRestantes].map((valor) => valor.toString().padStart(2, "0")).join(":");
 }
 
 function moeda(valor: number) {
@@ -235,7 +246,7 @@ export default function SaldosPage() {
   function baixarComprovante() {
     if (!saldoData) return;
     const resumo = saldoData.resumo_semanal;
-    const colunas = ["Jogador", "Horas da semana", "Taxa por hora", "Valor bruto", "Penalidades", "Total a receber", "Pagamento", "Pago em"];
+    const colunas = ["Jogador", "Horas reais da semana (seg-sex)", "Horas usadas no cálculo financeiro", "Taxa por hora", "Valor bruto", "Penalidades", "Total a receber", "Pagamento", "Pago em"];
     const linhas: (string | number)[][] = [
       ["Comprovante semanal", `${formatDataBR(resumo.data_inicio)} a ${formatDataBR(resumo.data_fim)}`],
       ["Lucro bruto da semana", dadosCalculadosEmTempoReal.lucroBrutoSemana.toFixed(2)],
@@ -245,6 +256,7 @@ export default function SaldosPage() {
       colunas,
       ...dadosCalculadosEmTempoReal.jogadores.map((j) => [
         j.username,
+        formatHMS(j.horas_semana_segundos),
         j.horas_semana.toFixed(2),
         dadosCalculadosEmTempoReal.taxaHoraSemana.toFixed(2),
         j.bruto_semana.toFixed(2),
@@ -411,9 +423,9 @@ export default function SaldosPage() {
                   Total de Horas Farmadas pela Equipe
                 </p>
                 <p className="text-3xl font-bold font-mono">
-                  {formatHoras(resumo.total_horas_equipe_semana)}
+                  {formatHMS(resumo.total_horas_equipe_semana_segundos)}
                 </p>
-                <p className="text-xs text-muted-foreground mt-1">Soma das horas jogadas na semana</p>
+                <p className="text-xs text-muted-foreground mt-1">Horas reais de seg–sex · base financeira: {formatHoras(resumo.total_horas_equipe_semana)}</p>
               </div>
 
               <div className="p-4 rounded-lg bg-black/40 border border-border/40 sm:col-span-2 lg:col-span-1">
@@ -633,7 +645,8 @@ export default function SaldosPage() {
 
                     {/* Horas da Semana */}
                     <td className="px-4 py-3.5 text-center font-mono font-medium">
-                      {formatHoras(j.horas_semana)}
+                      <div>{formatHMS(j.horas_semana_segundos)}</div>
+                      <div className="mt-1 font-sans text-[10px] font-normal text-muted-foreground">Pagamento: {formatHoras(j.horas_semana)}</div>
                     </td>
 
                     {/* Valor do Dia */}
@@ -722,7 +735,7 @@ export default function SaldosPage() {
                 </div>
                 <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
                   <div className="rounded-lg bg-black/20 p-2.5"><p className="text-muted-foreground">Horas hoje</p><p className="mt-1 font-mono font-semibold">{formatHoras(j.horas_dia)}</p></div>
-                  <div className="rounded-lg bg-black/20 p-2.5"><p className="text-muted-foreground">Horas semana</p><p className="mt-1 font-mono font-semibold">{formatHoras(j.horas_semana)}</p></div>
+                  <div className="rounded-lg bg-black/20 p-2.5"><p className="text-muted-foreground">Horas semana</p><p className="mt-1 font-mono font-semibold">{formatHMS(j.horas_semana_segundos)}</p><p className="mt-1 text-[10px] text-muted-foreground">Pagamento: {formatHoras(j.horas_semana)}</p></div>
                   <div className="rounded-lg bg-black/20 p-2.5"><p className="text-muted-foreground">Valor do dia</p><p className="mt-1 font-mono">R$ {j.valor_dia.toFixed(2).replace(".", ",")}</p></div>
                   <div className="rounded-lg bg-black/20 p-2.5"><p className="text-muted-foreground">Penalidades</p><p className={`mt-1 font-mono ${j.penalidades_semana > 0 ? "font-semibold text-red-400" : ""}`}>{j.penalidades_semana > 0 ? `−R$ ${j.penalidades_semana.toFixed(2).replace(".", ",")}` : "—"}</p></div>
                 </div>

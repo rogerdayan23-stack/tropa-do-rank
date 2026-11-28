@@ -25,6 +25,7 @@ interface JogadorSaldoDashboard {
 interface ResumoSemanaDashboard {
   lucro_bruto_semana: number;
   total_horas_equipe_semana: number;
+  total_horas_equipe_semana_segundos?: number;
 }
 
 interface SessaoEquipeDashboard {
@@ -48,11 +49,6 @@ function formatHHMM(iso: string) {
 function dataLocal(date = new Date()) {
   const deslocada = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
   return deslocada.toISOString().slice(0, 10);
-}
-
-function formatHoras(horas: number) {
-  const minutosTotais = Math.max(0, Math.round((Number(horas) || 0) * 60));
-  return `${Math.floor(minutosTotais / 60)}h ${String(minutosTotais % 60).padStart(2, "0")}m`;
 }
 
 function moeda(valor: number) {
@@ -321,7 +317,7 @@ export default function DashboardPage() {
         <Card>
           <CardContent className="flex items-center gap-3 p-4">
             <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary"><Clock size={18} /></span>
-            <div><p className="text-xs text-muted-foreground">Horas da semana</p><p className="text-xl font-bold tabular-nums">{resumoSemana ? formatHoras(resumoSemana.total_horas_equipe_semana) : "—"}</p></div>
+            <div><p className="text-xs text-muted-foreground">Horas da semana (seg–sex)</p><p className="text-xl font-bold tabular-nums">{resumoSemana ? formatHMS(resumoSemana.total_horas_equipe_semana_segundos ?? resumoSemana.total_horas_equipe_semana * 3600) : "—"}</p></div>
           </CardContent>
         </Card>
         <Card>

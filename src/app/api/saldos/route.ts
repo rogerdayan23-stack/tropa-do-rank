@@ -69,6 +69,7 @@ export async function GET(req: NextRequest) {
   const supabase = createServiceClient();
   const { searchParams } = new URL(req.url);
   const dataQuery = searchParams.get("data") || new Date().toISOString().split("T")[0];
+  const apenasHoras = searchParams.get("apenas_horas") === "true";
 
   try {
     const semana = getIntervaloSemana(dataQuery);
@@ -82,13 +83,17 @@ export async function GET(req: NextRequest) {
     if (usersError) throw usersError;
 
     // 2. Busca lucros diários da semana
-    const { data: lucrosSemanaRows, error: lucrosError } = await supabase
-      .from("lucros_diarios")
-      .select("data, valor_total")
-      .gte("data", semana.inicioStr)
-      .lte("data", semana.fimStr);
+    let lucrosSemanaRows: { data: string; valor_total: number }[] = [];
+    if (!apenasHoras) {
+      const { data, error } = await supabase
+        .from("lucros_diarios")
+        .select("data, valor_total")
+        .gte("data", semana.inicioStr)
+        .lte("data", semana.fimStr);
 
-    if (lucrosError) throw lucrosError;
+      if (error) throw error;
+      lucrosSemanaRows = data || [];
+    }
 
     const lucroPorDiaMap: Record<string, number> = {};
     for (const row of (lucrosSemanaRows || [])) {
@@ -355,6 +360,7 @@ export async function GET(req: NextRequest) {
     // 5. Converte para horas arredondadas de 30 em 30 minutos
     const horasPorUsuarioPorDia: Record<string, Record<string, number>> = {};
     const horasSemanaPorUsuario: Record<string, number> = {};
+    const segundosSemanaPorUsuario: Record<string, number> = {};
     const totalHorasTimePorDia: Record<string, number> = {};
 
     for (const u of (todosUsuarios || [])) {
@@ -366,10 +372,23 @@ export async function GET(req: NextRequest) {
         totalHorasTimePorDia[diaStr] = (totalHorasTimePorDia[diaStr] || 0) + horasArred;
       }
       const segundosSemana = Object.values(diasDoUsuario).reduce((total, segundos) => total + segundos, 0);
+      segundosSemanaPorUsuario[u.id] = segundosSemana;
       horasSemanaPorUsuario[u.id] = arredondarHorasParaMeiaHora(segundosSemana);
     }
 
+    if (apenasHoras) {
+      return NextResponse.json({
+        semana: { data_inicio: semana.inicioStr, data_fim: semana.fimStr },
+        total_horas_equipe_semana_segundos: Object.values(segundosSemanaPorUsuario).reduce((total, segundos) => total + segundos, 0),
+        jogadores: (todosUsuarios || []).map((u) => ({
+          id: u.id,
+          horas_semana_segundos: segundosSemanaPorUsuario[u.id] || 0,
+        })),
+      }, { headers: { "Cache-Control": "no-store" } });
+    }
+
     const totalHorasEquipeSemana = Object.values(horasSemanaPorUsuario).reduce((total, horas) => total + horas, 0);
+    const totalHorasEquipeSemanaSegundos = Object.values(segundosSemanaPorUsuario).reduce((total, segundos) => total + segundos, 0);
     const taxaHoraSemana = calcularTaxaHoraSemana(lucroBrutoSemana, totalHorasEquipeSemana);
 
     // 6. Divide o lucro acumulado da semana pelo total de horas da semana.
@@ -426,6 +445,7 @@ export async function GET(req: NextRequest) {
 
     const jogadores = (todosUsuarios || []).map((u: { id: string; username: string; avatar_url: string | null }) => {
       const horasDia = horasPorUsuarioPorDia[u.id]?.[dataQuery] || 0;
+      const segundosDia = segundosPorUsuarioPorDia[u.id]?.[dataQuery] || 0;
       const valorDia = ganhosPorUsuarioPorDia[u.id]?.[dataQuery] || 0;
 
       const horasSemana = horasSemanaPorUsuario[u.id] || 0;
@@ -439,7 +459,9 @@ export async function GET(req: NextRequest) {
         username: u.username,
         avatar_url: u.avatar_url,
         horas_dia: horasDia,
+        horas_dia_segundos: segundosDia,
         horas_semana: horasSemana,
+        horas_semana_segundos: segundosSemanaPorUsuario[u.id] || 0,
         valor_dia: Number(valorDia.toFixed(2)),
         bruto_semana: Number(ganhoBrutoSemana.toFixed(2)),
         penalidades_semana: Number(penalidadesSemana.toFixed(2)),
@@ -478,6 +500,7 @@ export async function GET(req: NextRequest) {
         data_fim: semana.fimStr,
         lucro_bruto_semana: Number(lucroBrutoSemana.toFixed(2)),
         total_horas_equipe_semana: totalHorasEquipeSemana,
+        total_horas_equipe_semana_segundos: totalHorasEquipeSemanaSegundos,
         taxa_hora_semana: Number(taxaHoraSemana.toFixed(2)),
         fechada: !!fechamento,
       },

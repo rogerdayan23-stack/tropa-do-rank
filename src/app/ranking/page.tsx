@@ -33,6 +33,11 @@ function nomeJogador(jogador: RankingEntry) {
   return jogador.username || jogador.apelido;
 }
 
+function dataLocalHoje() {
+  const agora = new Date();
+  return new Date(agora.getTime() - agora.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
+}
+
 function Avatar({ url, nome, grande = false }: { url?: string | null; nome: string; grande?: boolean }) {
   const src = url ? (url.startsWith("http") ? url : `/${url.replace(/^\//, "")}`) : null;
   return (
@@ -61,10 +66,35 @@ export default function RankingPage() {
 
   const carregar = useCallback(async () => {
     try {
-      const res = await fetch(`/api/ranking?periodo=${periodo}`, { cache: "no-store" });
+      const [res, resHoras] = await Promise.all([
+        fetch(`/api/ranking?periodo=${periodo}`, { cache: "no-store" }),
+        periodo === "semana"
+          ? fetch(`/api/saldos?apenas_horas=true&data=${dataLocalHoje()}`, { cache: "no-store" })
+          : Promise.resolve(null),
+      ]);
       if (!res.ok) throw new Error("Falha ao carregar ranking");
       const data = await res.json();
-      setRanking(data.ranking || []);
+      let rankingAtualizado: RankingEntry[] = data.ranking || [];
+      if (resHoras) {
+        if (!resHoras.ok) throw new Error("Falha ao sincronizar as horas da semana");
+        const dadosHoras = await resHoras.json();
+        const horasPorUsuario = new Map<string, number>((dadosHoras.jogadores || []).map((jogador: { id: string; horas_semana_segundos: number }) => [
+          jogador.id,
+          Math.max(0, Number(jogador.horas_semana_segundos) || 0),
+        ]));
+        rankingAtualizado = rankingAtualizado
+          .map((jogador) => {
+            const horas = horasPorUsuario.get(jogador.id) ?? 0;
+            return { ...jogador, total_segundos: horas, meta_semanal_segundos: horas };
+          })
+          .sort((a, b) => b.total_segundos - a.total_segundos || nomeJogador(a).localeCompare(nomeJogador(b)))
+          .map((jogador, index) => ({
+            ...jogador,
+            posicao: index + 1,
+            medalha: ["🥇", "🥈", "🥉"][index] || "",
+          }));
+      }
+      setRanking(rankingAtualizado);
       setMetaSemanal(data.meta_semanal_segundos || 10 * 60 * 60);
       setErro(false);
       setAtualizadoEm(new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
