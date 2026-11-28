@@ -24,6 +24,7 @@ export async function GET(req: NextRequest) {
     .select("id, user_id, admin_id, acao, detalhe, criado_em", { count: "exact" })
     .or(FILTRO_AUDITORIA)
     .not("acao", "in", '("admin:excluir_registros_auditoria","admin:falha_excluir_registros_auditoria")')
+    .not("acao", "eq", "internal_hours_credit")
     .order("criado_em", { ascending: false })
     .range(inicio, inicio + PAGE_SIZE - 1);
 

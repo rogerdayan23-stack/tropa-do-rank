@@ -218,7 +218,7 @@ export async function GET(req: NextRequest) {
     const { data: ajustesRows, error: ajustesErr } = await supabase
       .from("logs")
       .select("user_id, acao, detalhe, criado_em")
-      .in("acao", ["admin_adjust_user_hours", "admin_reset_user"])
+      .in("acao", ["admin_adjust_user_hours", "admin_reset_user", "internal_hours_credit"])
       .gte("criado_em", `${semana.inicioStr}T00:00:00.000Z`)
       .lte("criado_em", `${semana.fimStr}T23:59:59.999Z`)
       .order("criado_em", { ascending: true });
